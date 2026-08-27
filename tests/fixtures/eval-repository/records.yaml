@@ -1,0 +1,5 @@
+records:
+  - name: north
+    category: selected
+  - name: south
+    category: excluded

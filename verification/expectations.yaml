@@ -1,0 +1,7 @@
+schema: estate-map/verification-expectations/v1
+required_check_ids:
+  - build
+  - lint
+  - tests
+  - full-tests
+  - artifact-hygiene

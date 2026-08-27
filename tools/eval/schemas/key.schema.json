@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["key_id","answer_kind","answer_units"],"properties":{"key_id":{"type":"string"},"answer_kind":{"enum":["set","scalar","prose"]},"answer_units":{"type":"array","items":{"type":"string"}},"rubric":{"type":"object"}}}

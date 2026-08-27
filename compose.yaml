@@ -1,0 +1,41 @@
+name: estate-map
+
+services:
+  neo4j:
+    image: neo4j:5.26.14-community
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ASCRYBE_NEO4J_HTTP_PORT:-7475}:7474"
+      - "127.0.0.1:${ASCRYBE_NEO4J_BOLT_PORT:-7688}:7687"
+    environment:
+      NEO4J_AUTH: "${ASCRYBE_NEO4J_USERNAME:-neo4j}/${ASCRYBE_NEO4J_PASSWORD:?Set ASCRYBE_NEO4J_PASSWORD in .env}"
+      ASCRYBE_NEO4J_USERNAME: "${ASCRYBE_NEO4J_USERNAME:-neo4j}"
+      ASCRYBE_NEO4J_PASSWORD: "${ASCRYBE_NEO4J_PASSWORD:?Set ASCRYBE_NEO4J_PASSWORD in .env}"
+      NEO4J_server_memory_heap_initial__size: "${ASCRYBE_NEO4J_HEAP_INITIAL:-1G}"
+      NEO4J_server_memory_heap_max__size: "${ASCRYBE_NEO4J_HEAP_MAX:-4G}"
+      NEO4J_server_memory_pagecache_size: "${ASCRYBE_NEO4J_PAGECACHE:-2G}"
+      NEO4J_dbms_usage__report_enabled: "false"
+      # A client that abandons an HTTP request does not cancel the query behind it. Without a
+      # server-side bound an abandoned traversal keeps running and holds schema locks, which
+      # blocks every later index or constraint change. The database enforces the limit itself.
+      NEO4J_db_transaction_timeout: "${ASCRYBE_NEO4J_TRANSACTION_TIMEOUT:-180s}"
+      NEO4J_db_lock_acquisition_timeout: "${ASCRYBE_NEO4J_LOCK_TIMEOUT:-60s}"
+    volumes:
+      - estate-map-neo4j-data:/data
+      - estate-map-neo4j-logs:/logs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          cypher-shell -a bolt://127.0.0.1:7687
+          -u "$${ASCRYBE_NEO4J_USERNAME}"
+          -p "$${ASCRYBE_NEO4J_PASSWORD}"
+          "RETURN 1" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  estate-map-neo4j-data:
+  estate-map-neo4j-logs:

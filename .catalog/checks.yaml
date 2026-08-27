@@ -1,0 +1,65 @@
+api_version: example.project-checks/v1
+
+overrides:
+  build:
+    command: >-
+      git ls-files -z -- '*.mjs' |
+      bash -c 'while IFS= read -r -d "" file; do node --check "$file" || exit; done' &&
+      printf 'ascrybe build: checked Node sources\n'
+    input_paths:
+      - "**/*.mjs"
+    evidence:
+      execution:
+        stream: stdout
+        pattern: "ascrybe build: checked Node sources"
+      cache: { mode: not_applicable }
+
+  tests:
+    command: "node scripts/test-fast.mjs"
+    input_paths:
+      - "**"
+    evidence:
+      execution:
+        stream: stdout
+        pattern: "# pass [1-9][0-9]*"
+      cache: { mode: not_applicable }
+
+  # A rebase or cherry-pick of a ledger-rebinding artifact keeps the ledger's BYTES intact while
+  # moving the commits it pins, producing an artifact that is silently invalid: the governed document
+  # is unchanged, but produced_at_commit_sha no longer names the commit that last changed it. The
+  # build/tests/lint battery cannot see this, because no test derives a pin from Git. The runtime can
+  # reach this state by itself whenever it reconciles a candidate onto a moved protected ref, so the
+  # checker belongs in the declared battery rather than only in the local verification suite.
+  design-authority:
+    command: "node scripts/check-design-authority.mjs"
+    input_paths:
+      - "DESIGN-AUTHORITY-LEDGER.json"
+      - "DESIGN-AUTHORITY-HISTORY-BRIDGE.json"
+      - "scripts/check-design-authority*.mjs"
+      - "scripts/generate-design-authority-history-bridge.mjs"
+      - "*.md"
+    evidence:
+      execution:
+        stream: stdout
+        pattern: "design-authority consistency: PASS"
+      cache: { mode: not_applicable }
+
+  lint:
+    command: >-
+      bash -n run-census.sh &&
+      if output=$(git grep -n -E '[[:blank:]]+$' -- '*.mjs'); then
+        printf '%s\n' "$output";
+        exit 1;
+      else
+        status=$?;
+        [ "$status" -eq 1 ] || exit "$status";
+      fi &&
+      printf 'ascrybe lint: checked shell syntax and Node whitespace\n'
+    input_paths:
+      - "**/*.mjs"
+      - "run-census.sh"
+    evidence:
+      execution:
+        stream: stdout
+        pattern: "ascrybe lint: checked shell syntax and Node whitespace"
+      cache: { mode: not_applicable }

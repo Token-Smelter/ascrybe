@@ -1,0 +1,54 @@
+# ARTIFACT RULE
+#
+# Generated output is never versioned. Git tracks SOURCE and DOCUMENTS; every run payload,
+# projection, evaluation bundle, checkpoint and receipt lives in ignored custody, and is
+# referenced from Git only by a tracked manifest carrying its path, size and digest
+# (see analysis/run-manifests/ for the pattern that already works).
+#
+# This is not tidiness. Committed payloads put two blobs over GitHub's 100 MB hard limit into
+# history and made publication impossible. A regenerable file in Git costs permanent repository
+# bloat; generated custody belongs in the external root with a tracked manifest.
+#
+# scripts/check-artifact-hygiene.mjs enforces the size ceiling at commit time so the next
+# oversized payload fails immediately instead of at publish time months later.
+
+# --- generated run output (ignored wholesale) ---
+/runs
+/out
+/logs
+/checkpoints
+/estate
+/.evals
+/.verification
+
+# --- generated analysis payloads: documents are tracked, payloads are not ---
+/analysis/**/*.json
+/analysis/**/*.html
+/analysis/**/*.tar.gz
+/analysis/**/*.jsonl
+/analysis/review-packages/
+/analysis/archive/
+/analysis/current-evidence/
+# run manifests are the durable custody record and MUST stay tracked
+!/analysis/run-manifests/
+!/analysis/run-manifests/**/*.json
+
+# --- worktrees are siblings of the repo, never nested inside it ---
+/.worktrees/
+
+# --- secrets and machine-local configuration ---
+.env
+# One config per estate: ascrybe.config.json, <estate>.ascrybe.config.json.
+# The tracked ascrybe.config.example.json is not matched.
+*ascrybe.config.json
+pi-agent/auth.json
+pi-agent/models.json
+
+# --- dependencies ---
+# No trailing slash: a trailing slash matches a DIRECTORY only, and a symlink named node_modules
+# is not one. A link created for a test run was therefore not ignored, was committed, and
+# published its target -- an absolute path on the machine that made it.
+node_modules
+
+# Built skill bundles are artifacts of the checkout, not sources.
+dist/

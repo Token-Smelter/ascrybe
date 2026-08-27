@@ -1,0 +1,4 @@
+name: absent
+version: 1
+api_version: 1
+entry_point: index.mjs

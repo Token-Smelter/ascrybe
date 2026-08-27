@@ -1,0 +1,211 @@
+{
+  "schema": "estate-map-runner/restored-source-provenance/v1",
+  "source_repository": "<mapped estate>",
+  "source_commit": "9d0058007b77dcb153064bc9c7707a15cd97fd8b",
+  "extraction": "git archive of the pinned commit tree; each destination re-verified against git cat-file blob bytes",
+  "files": [
+    {
+      "source_path": "tools/estate-map/cartography/README.md",
+      "destination_path": "tools/cartography/README.md",
+      "git_blob_oid": "31ab19d9811cdf2be9ea982c2a7cea42352f5f35",
+      "byte_count": 13021,
+      "sha256": "b3694873ee013c1c8ad4e43fa109201956c39dee7258460406b7bda58ceb1087"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/canon.mjs",
+      "destination_path": "tools/cartography/canon.mjs",
+      "git_blob_oid": "22e2c8bd18ff0e846397258914e54d7e2e1b239a",
+      "byte_count": 10323,
+      "sha256": "20024df368c68a351ee157ec235b620d56a83f97b0641e70857190cb51745db8"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/cli.mjs",
+      "destination_path": "tools/cartography/cli.mjs",
+      "git_blob_oid": "52abeb0d6103dee960b8d10e4fa0e5499d2c83aa",
+      "byte_count": 5699,
+      "sha256": "7a24765ffa8e57484d9af48b371a641af33c66579ca87bb60e2768a623e5bb82"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/eval-report.mjs",
+      "destination_path": "tools/cartography/eval-report.mjs",
+      "git_blob_oid": "83cb8d8098be7561dceecde351ff16e1aca62fb3",
+      "byte_count": 15761,
+      "sha256": "21c0c251a35e5a3d362c791a395916c3d5824954a04ecd1f797f26d995bdfd3c"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/model.mjs",
+      "destination_path": "tools/cartography/model.mjs",
+      "git_blob_oid": "32ebbb498765f46b5703ce4f57a31a3951254966",
+      "byte_count": 61772,
+      "sha256": "a6c1478e7df2b6e4f74f43b7ab20a1c78308e534a117d7b7ff8f40ee04c9e262"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/render.mjs",
+      "destination_path": "tools/cartography/render.mjs",
+      "git_blob_oid": "4335ba05c320a40d4878596145d116af4179fc67",
+      "byte_count": 27705,
+      "sha256": "dfe5d4a34ff16cd3a3b0bed10609d8fed9ba77fa2e09d46d583797bf4eb16ede"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/screenshots.mjs",
+      "destination_path": "tools/cartography/screenshots.mjs",
+      "git_blob_oid": "0eb667c355fbf17997997199be908a39b7463379",
+      "byte_count": 2217,
+      "sha256": "70c9375f93483d09179b74ac00c958e0048701ed32189d07d3f1806cca2f1f54"
+    },
+    {
+      "source_path": "tools/estate-map/cartography/tiles.mjs",
+      "destination_path": "tools/cartography/tiles.mjs",
+      "git_blob_oid": "568423378bc2ae9b49ab57cf6f3792b1ebecaa08",
+      "byte_count": 11726,
+      "sha256": "0394afd7b4875cc4a34fd0d144e6353c755c7acfa5325a589e3149f8cb9e75c4"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/aws.mjs",
+      "destination_path": "tools/extractors/aws.mjs",
+      "git_blob_oid": "519063d8167625d9350deda4f0d86b1ad0bdd5ba",
+      "byte_count": 1625,
+      "sha256": "cdb49cd0fe6f8742f397028dd1bb5900a2b210908a3f965f168f9b8e3dff0bd3"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/capabilities.mjs",
+      "destination_path": "tools/extractors/capabilities.mjs",
+      "git_blob_oid": "37dd475a08f1c2819b579efa1aafdebcf607c39a",
+      "byte_count": 17130,
+      "sha256": "963e0f9a0acc26321cabf752100a56025788e1bbf47920b27b9233b6181b6b2e"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/config.mjs",
+      "destination_path": "tools/extractors/config.mjs",
+      "git_blob_oid": "e3fa7984c6cf5c82102eb093ab52ba992845b314",
+      "byte_count": 910,
+      "sha256": "8a03a7616c3698c877bbd7ff735156e1e0266ae8d027cd7b6a61a2a993794d8d"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/dependencies.mjs",
+      "destination_path": "tools/extractors/dependencies.mjs",
+      "git_blob_oid": "15df44aafeda1c1611f3261886096a1489c4bc9b",
+      "byte_count": 1815,
+      "sha256": "216f1d47ac4cd75f103122aa3fd4f7847e7b65ec61a0f9ace1144208a59d0acb"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/envelopes.mjs",
+      "destination_path": "tools/extractors/envelopes.mjs",
+      "git_blob_oid": "2d76ea9aea628b4c4c3b0aa7611f8b09c5327083",
+      "byte_count": 17022,
+      "sha256": "e291eee13a1c0c84aa467ff67cc886fda80efab1291a753f4612042e7f09446b"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/hcl.mjs",
+      "destination_path": "tools/extractors/hcl.mjs",
+      "git_blob_oid": "1c86ffa2296e4fdf251d8cee4007091b4b928bcc",
+      "byte_count": 4575,
+      "sha256": "c3425063accf1286bc16bb1ce3d16e5e83a7a8cc937fae7592edb7b6a64af031"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/http.mjs",
+      "destination_path": "tools/extractors/http.mjs",
+      "git_blob_oid": "382205a355719b6444b39425b26dbca1c0409267",
+      "byte_count": 10078,
+      "sha256": "06434b8140cbdb4e95f9c42725e6f5650515369243907d77b192249eebbf1aeb"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/index.mjs",
+      "destination_path": "tools/extractors/index.mjs",
+      "git_blob_oid": "16e935ea5bca194adbc2224600df802115389923",
+      "byte_count": 4299,
+      "sha256": "0d270c4708952a4d6f0532c9491a3e74b4606ddd08a4157700415683d962bfe8"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/literal-values.mjs",
+      "destination_path": "tools/extractors/literal-values.mjs",
+      "git_blob_oid": "c91dce7359d4a28dff555f019e029fa62bb520bd",
+      "byte_count": 24475,
+      "sha256": "577249cb156171a91291c6529d0b4c47cb198ef250bc938ba9e88173f0b9e98d"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/manifest-completeness.mjs",
+      "destination_path": "tools/extractors/manifest-completeness.mjs",
+      "git_blob_oid": "a720ee782d2ce3b1c0bf3f617e9492191686e119",
+      "byte_count": 8357,
+      "sha256": "1ec1ebdf6c861973d733272ad5b6e709aefa93a94a90f00006f916578f120f11"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/persistence.mjs",
+      "destination_path": "tools/extractors/persistence.mjs",
+      "git_blob_oid": "a9ec49d9c106662dabc958da7825b73c53994336",
+      "byte_count": 10637,
+      "sha256": "48d246df477457e7340f15863f3387d0dbeaab52ea4101d6a93df9e953742bbb"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/sql-dml.mjs",
+      "destination_path": "tools/extractors/sql-dml.mjs",
+      "git_blob_oid": "ab9db4ab3f5d395c80caf3124e070e5e4e031f2c",
+      "byte_count": 7916,
+      "sha256": "6a453ea62f0a3bb8602b49da5f892f6e9a7d0188f8ca487ea722ea092f73bf4d"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/sql.mjs",
+      "destination_path": "tools/extractors/sql.mjs",
+      "git_blob_oid": "e503ed93ca1357b55c8c00faf68e2f4d63ceb8d3",
+      "byte_count": 551,
+      "sha256": "1f2453371c4445a5b9d2e723512bd9534145ee5f40abe9cd8c12203521df2d27"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/sqlite-ddl.mjs",
+      "destination_path": "tools/extractors/sqlite-ddl.mjs",
+      "git_blob_oid": "fedb34ac5bc45a64b88461e18fcd248754bdae7e",
+      "byte_count": 19416,
+      "sha256": "85cc73cd6bba834991cc0d2d7d826c05d18269d0566b8fc72c895a169405cadf"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/tool-registrations.mjs",
+      "destination_path": "tools/extractors/tool-registrations.mjs",
+      "git_blob_oid": "8d20f7f5889cd094f69976bf31c46e4d32dfa2f3",
+      "byte_count": 6640,
+      "sha256": "612427243565cca905bc607d748ef370db7fe64ed15654b38664969e42776ca5"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/treesitter-csharp.mjs",
+      "destination_path": "tools/extractors/treesitter-csharp.mjs",
+      "git_blob_oid": "6d2b46cdcb539a325f853a496087a302e700a967",
+      "byte_count": 10629,
+      "sha256": "f690521669eeb470a5ec00d0ad2dba4a7a0c588a0559197212b5225ca2a31a7f"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/treesitter-js.mjs",
+      "destination_path": "tools/extractors/treesitter-js.mjs",
+      "git_blob_oid": "3aebc15ed4b5d9d309e3ca1e61802132b0994ccb",
+      "byte_count": 7210,
+      "sha256": "c621129210aecfa8389dff7af0f88c5a6708880e490800684dd85189ed287423"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/treesitter-kotlin.mjs",
+      "destination_path": "tools/extractors/treesitter-kotlin.mjs",
+      "git_blob_oid": "e54c93e676253e0f16a3cf39ac53f9f702bf637f",
+      "byte_count": 4260,
+      "sha256": "e9d0876dcbd2199de5e3a6e276dd26874318f632d632e9279be66e858861e1da"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/treesitter-python.mjs",
+      "destination_path": "tools/extractors/treesitter-python.mjs",
+      "git_blob_oid": "8e01f2dd2c0d191e5dec51492114b98b77ef0af0",
+      "byte_count": 6918,
+      "sha256": "01e07c4c9c05955db9a1e13820819ff0bcd23c8823ff17c520afe1189495f49c"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/treesitter-swift.mjs",
+      "destination_path": "tools/extractors/treesitter-swift.mjs",
+      "git_blob_oid": "4613478369161f7424d6f5c34b1d25a7931e589c",
+      "byte_count": 5476,
+      "sha256": "b610611e9ee2ebc5bcb97894daa2d4cf87ef0066ccf3b9c4f3d3e3187e777f6b"
+    },
+    {
+      "source_path": "tools/estate-map/extractors/yaml-catalog.mjs",
+      "destination_path": "tools/extractors/yaml-catalog.mjs",
+      "git_blob_oid": "125e759af48f4e102db05758c4fd9addd5c203cb",
+      "byte_count": 7431,
+      "sha256": "32d721075e1f2970e29c06c05d40b19dfb67616e66526eb86bf5f769a46ea59d"
+    }
+  ]
+}

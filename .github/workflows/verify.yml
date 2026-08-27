@@ -1,0 +1,38 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run setup
+      - run: npm run build
+      - run: node scripts/test-fast.mjs
+      # The registry-bound battery: a gate that exists but was never registered runs nowhere, and
+      # this is the only check that notices. It short-circuits rather than quietly skipping.
+      #
+      # Exit 2 is INCOMPLETE and is expected here: the Neo4j and expensive gates cannot run on a
+      # hosted runner, and a battery that pretended otherwise would be lying. Exit 1 is REGRESSION
+      # -- a registry disagreement or a failed check -- and must fail the build.
+      - run: |
+          npm run verify || case $? in
+            2) echo "verification INCOMPLETE: opt-in gates unavailable on CI, no regression" ;;
+            *) exit 1 ;;
+          esac
+      - run: npm run verify:falsifiers
+      - run: node scripts/check-artifact-hygiene.mjs --tracked
+      # The bundle is what consumers install; a version match with a changed data model is exactly
+      # the drift a version check alone misses.
+      - run: npm run skill:bundle
+      - run: npm run skill:verify

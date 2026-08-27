@@ -1,0 +1,32 @@
+{
+  "name": "ascrybe",
+  "private": true,
+  "scripts": {
+    "setup": "npm install --ignore-scripts --no-package-lock",
+    "build": "git ls-files -z -- '*.mjs' | xargs -0 -n1 node --check",
+    "state:init": "node tools/artifact-state.mjs init",
+    "state:verify": "node tools/artifact-state.mjs verify",
+    "state:migrate": "node tools/artifact-state.mjs migrate",
+    "state:snapshot": "node tools/artifact-state.mjs snapshot",
+    "authority:bridge": "node scripts/generate-design-authority-history-bridge.mjs",
+    "dashboard:service:render": "node tools/dashboard-user-service.mjs --render",
+    "dashboard:service:install": "node tools/dashboard-user-service.mjs --install",
+    "neo4j:up": "docker compose --env-file .env up -d neo4j",
+    "neo4j:down": "docker compose --env-file .env down",
+    "map:project": "node --max-old-space-size=16384 tools/project-estate-map.mjs --runtime-config ascrybe.config.json",
+    "map:dashboard": "node tools/estate-dashboard-server.mjs --runtime-config ascrybe.config.json",
+    "map:query": "node tools/estate-graph-query.mjs --runtime-config ascrybe.config.json",
+    "map:cypher": "node tools/estate-graph-cypher.mjs --runtime-config ascrybe.config.json",
+    "skill:bundle": "node scripts/build-skill-bundle.mjs",
+    "skill:verify": "node scripts/build-skill-bundle.mjs verify",
+    "eval:run": "node tools/eval/cli.mjs",
+    "verify": "node scripts/verify-all.mjs",
+    "verify:falsifiers": "node scripts/verify-falsifiers.mjs"
+  },
+  "dependencies": {
+    "json5": "2.2.3",
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.20.8",
+    "yaml": "2.8.3"
+  }
+}

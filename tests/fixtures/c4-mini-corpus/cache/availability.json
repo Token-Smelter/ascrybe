@@ -1,0 +1,6 @@
+{
+  "schema": "estate-map/extractor-availability/v1",
+  "kind": "extractor_availability",
+  "available": [{ "extractor": "mini", "specifier": "./mini.mjs", "kind": "mini_fact" }],
+  "exclusions": []
+}

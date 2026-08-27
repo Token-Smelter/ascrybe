@@ -1,0 +1,7 @@
+requires_capabilities:
+  - type: brew
+    version: "^1"
+name: entries
+version: 1
+api_version: 1
+entry_point: index.mjs

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ascrybe · Forensic graph</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="command-rail">
+    <a class="brand" href="/" aria-label="Ascrybe home">
+      <span class="brand-mark" aria-hidden="true">⌁</span>
+      <span>Ascrybe</span>
+    </a>
+    <button id="go-back" class="quiet-button" type="button" aria-label="Back to previous selection" hidden>← Back</button>
+    <nav id="trail" class="trail" aria-label="Navigation trail"></nav>
+    <div class="projection-switch" role="group" aria-label="Projection generation">
+      <button class="projection-button is-active" data-view="selected" type="button">Selected</button>
+      <button class="projection-button" data-view="working" type="button">Live build</button>
+    </div>
+    <div class="projection-switch" role="group" aria-label="Drill-down mode" title="Core entities: a node's composition and flow as nodes, everything else folded into counted bundles. Atoms: every relation unfolded.">
+      <button class="expand-button is-active" data-expand="structural" type="button">Entities</button>
+      <button class="expand-button" data-expand="all" type="button">Atoms</button>
+    </div>
+    <div class="search-shell">
+      <label class="sr-only" for="graph-search">Search the estate graph</label>
+      <input id="graph-search" type="search" placeholder="Find a claim, entity, document, or symbol" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+      <div id="search-results" class="search-results" hidden></div>
+    </div>
+    <label class="quota" title="How many neighbours of any one kind to draw before folding the rest into a counted bundle. Structure is never crowded out; the bundle always carries the true total.">
+      <span>Per kind</span>
+      <input id="kind-quota" type="range" min="3" max="120" step="1" value="30">
+      <output id="kind-quota-value">30</output>
+    </label>
+    <button id="toggle-concepts" class="quiet-button" type="button" aria-pressed="false">Concepts</button>
+    <button id="reset-view" class="quiet-button" type="button">Reset view</button>
+  </header>
+
+  <main class="workspace">
+    <section class="graph-stage" aria-label="Estate graph">
+      <svg id="graph" role="group" aria-labelledby="graph-title graph-description">
+        <title id="graph-title">Interactive software estate graph</title>
+        <desc id="graph-description">Hover or focus nodes and relations for their details. Select nodes to reveal bounded neighborhoods and exact provenance.</desc>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+        </defs>
+        <g id="viewport">
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </g>
+      </svg>
+      <section id="graph-detail" class="graph-detail" role="tooltip" hidden>
+        <span id="graph-detail-type" class="graph-detail-type"></span>
+        <h2 id="graph-detail-title"></h2>
+        <dl id="graph-detail-fields"></dl>
+      </section>
+      <div id="empty-state" class="empty-state" hidden>
+        <strong>No projection is available.</strong>
+        <span>Stage a working generation or promote a selected graph, then reload.</span>
+      </div>
+      <div id="graph-error" class="graph-error" role="alert" hidden>
+        <strong id="graph-error-stage"></strong>
+        <span id="graph-error-message"></span>
+      </div>
+      <div class="graph-legend" aria-label="Graph key">
+        <span><i class="legend-shape claim"></i>Claim</span>
+        <span><i class="legend-shape referent"></i>Entity</span>
+        <span><i class="legend-shape document"></i>Document</span>
+        <span><i class="legend-shape evidence"></i>Evidence</span>
+        <span><i class="legend-line structural"></i>Contains</span>
+        <span><i class="legend-line flow"></i>Flow</span>
+        <span><i class="legend-line verified"></i>Verified path</span>
+        <span><i class="legend-line unresolved"></i>Unresolved</span>
+      </div>
+      <div class="graph-help">Depth is containment; blocks group siblings by kind; bowed edges are flow across the structure · wheel to zoom · drag to pan</div>
+    </section>
+
+    <aside id="concepts" class="concepts" aria-label="Estate concepts" hidden>
+      <div class="concepts-head">
+        <h2>What this estate is about</h2>
+        <button id="close-concepts" class="icon-button" type="button" aria-label="Close concepts">×</button>
+      </div>
+      <p class="concepts-note">Exact counts over the selected projection. Ranking only; nothing here is clustered or inferred.</p>
+      <section>
+        <h3>Documents carrying the most claims</h3>
+        <ol id="concepts-documents"></ol>
+      </section>
+      <section>
+        <h3>Entities the claims are about</h3>
+        <ol id="concepts-asserted"></ol>
+      </section>
+      <section>
+        <h3>Entities the code is built around</h3>
+        <ol id="concepts-structural"></ol>
+      </section>
+      <section>
+        <h3>Most-mentioned surfaces</h3>
+        <p class="concepts-note">Byte-exact token occurrences. Common words that are also symbol names rank highly here; this measures vocabulary, not subject matter.</p>
+        <ol id="concepts-documented"></ol>
+      </section>
+    </aside>
+
+    <aside id="inspector" class="inspector" aria-label="Selected node" hidden>
+      <div class="inspector-head">
+        <div>
+          <span id="inspector-kind" class="kind-label"></span>
+          <h1 id="inspector-label"></h1>
+        </div>
+        <button id="close-inspector" class="icon-button" type="button" aria-label="Close inspector">×</button>
+      </div>
+      <div class="inspector-actions">
+        <button id="expand-node" type="button">Expand neighborhood</button>
+        <button id="trace-provenance" type="button">Trace provenance</button>
+        <button id="set-path-origin" class="quiet-button" type="button">Set path origin</button>
+      </div>
+      <p id="path-message" class="path-message" hidden></p>
+      <dl id="inspector-properties" class="property-list"></dl>
+      <section class="relation-section">
+        <div class="section-heading">
+          <h2>Visible relations</h2>
+          <span id="neighbor-count"></span>
+        </div>
+        <div id="neighbor-summary" class="relation-summary"></div>
+      </section>
+      <section id="bundle-section" class="relation-section" hidden>
+        <div class="section-heading">
+          <h2>Folded here</h2>
+        </div>
+        <div id="bundle-summary" class="relation-summary bundle-summary"></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="status-rail">
+    <span id="connection-status"><i></i>Connecting</span>
+    <span id="projection-status">No projection</span>
+    <span id="coverage-status"></span>
+    <span id="view-status"></span>
+    <code id="source-status"></code>
+  </footer>
+
+  <template id="search-result-template">
+    <button class="search-result" type="button">
+      <span class="search-result-kind"></span>
+      <strong></strong>
+    </button>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

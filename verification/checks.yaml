@@ -1,0 +1,122 @@
+schema: estate-map/verification-registry/v2
+profile_binding:
+  path: .catalog/checks.yaml
+  api_version: example.project-checks/v1
+  checks:
+    - check_id: build
+      profile_check_id: build
+    - check_id: tests
+      profile_check_id: tests
+    - check_id: lint
+      profile_check_id: lint
+gate_discovery:
+  boundaries:
+    - root: tools
+      max_depth: 1
+    - root: scripts
+      max_depth: 1
+    - root: analysis
+      max_depth: 2
+  candidate_pattern: ^scripts/check-[^/]+\.mjs$
+  exclusions: []
+checks:
+  - id: build
+    command: "git ls-files -z -- '*.mjs' | bash -c 'while IFS= read -r -d \"\" file;
+      do node --check \"$file\" || exit; done' && printf 'ascrybe build: checked
+      Node sources\\n'"
+    category: standard
+    expectation: expect_pass
+    required_environment:
+      - kind: command
+        name: git
+      - kind: command
+        name: bash
+      - kind: command
+        name: node
+    failure_signature: null
+    gate_path: null
+    reason: Execute the build command mechanically bound to the live the host
+      runtime check profile.
+    source_citation:
+      - .catalog/checks.yaml:4-15
+    timeout_seconds: 120
+  - id: lint
+    command: >-
+      bash -n run-census.sh && if output=$(git grep -n -E '[[:blank:]]+$' --
+      '*.mjs'); then
+        printf '%s\n' "$output";
+        exit 1;
+      else
+        status=$?;
+        [ "$status" -eq 1 ] || exit "$status";
+      fi && printf 'ascrybe lint: checked shell syntax and Node whitespace\n'
+    category: standard
+    expectation: expect_pass
+    required_environment:
+      - kind: command
+        name: git
+      - kind: command
+        name: bash
+    failure_signature: null
+    gate_path: null
+    reason: Execute the lint command mechanically bound to the live the host runtime
+      check profile.
+    source_citation:
+      - .catalog/checks.yaml:27-45
+    timeout_seconds: 120
+  - id: tests
+    command: node scripts/test-fast.mjs
+    category: standard
+    expectation: expect_pass
+    required_environment:
+      - kind: command
+        name: node
+    failure_signature: null
+    gate_path: null
+    reason: Execute the mechanically bound tracked/self-contained fast scope,
+      including both C4 mini-corpus proofs, without ignored assets.
+    source_citation:
+      - .catalog/checks.yaml:17-25
+      - scripts/test-fast.mjs:1-55
+      - tests/c4-mini-corpus.test.mjs:1-279
+    timeout_seconds: 600
+  - id: full-tests
+    command: node --test tests/*.test.mjs
+    category: expensive
+    expectation: expect_pass
+    required_environment:
+      - kind: command
+        name: node
+      - kind: path
+        name: estate
+      - kind: path
+        name: runs/recall
+      - kind: opt_in
+        name: expensive
+    failure_signature: null
+    gate_path: null
+    reason: Run the full historical/pinned-estate suite only when its ignored estate
+      and recall custody assets are explicitly present.
+    source_citation:
+      - scripts/test-fast.mjs:7-21
+      - tools/neural-census.mjs:135-136
+      - tests/v28-regression-matrix.test.mjs:32-70
+    timeout_seconds: 1200
+  - id: artifact-hygiene
+    command: node scripts/check-artifact-hygiene.mjs --tracked
+    category: standard
+    expectation: expect_pass
+    required_environment:
+      - kind: command
+        name: node
+      - kind: command
+        name: git
+    failure_signature: null
+    gate_path: scripts/check-artifact-hygiene.mjs
+    reason: Fail closed on tracked payloads over the size ceiling or generated
+      output committed outside ignored custody; the tracked scope verifies the
+      repository as it stands rather than whatever happens to be staged.
+    source_citation:
+      - scripts/check-artifact-hygiene.mjs:16-21
+      - .gitignore:1-13
+    timeout_seconds: 120

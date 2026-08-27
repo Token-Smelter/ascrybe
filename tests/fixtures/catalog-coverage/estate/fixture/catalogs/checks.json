@@ -1,0 +1,4 @@
+{
+  "fast": { "command": "node test", "retries": 2, "enabled": true },
+  "slow": { "command": "node integration", "enabled": false }
+}

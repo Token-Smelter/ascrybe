@@ -1,0 +1,1 @@
+CREATE TABLE same_name (id TEXT PRIMARY KEY);

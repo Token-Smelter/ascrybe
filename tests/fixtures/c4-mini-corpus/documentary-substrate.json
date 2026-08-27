@@ -1,0 +1,62 @@
+{
+  "schema": "estate-map/c4-mini-documentary-substrate/v1",
+  "source_version_id": "source-version:c4-mini-documentary-v1",
+  "mentions": [
+    { "key": "shared-doc", "file": "design/shared-a.yaml", "line": 1, "surface": "urn:mini:shared", "role": "structured_metadata" },
+    { "key": "blocked-doc", "file": "design/blocked.yaml", "line": 1, "surface": "urn:mini:blocked", "role": "structured_metadata" },
+    { "key": "blocked-term", "file": "docs/terms.md", "line": 3, "surface": "urn:mini:blocked", "role": "definition" },
+    { "key": "canonical-definition", "file": "docs/terms.md", "line": 1, "surface": "canonical-mini", "role": "definition" },
+    { "key": "legacy-alias", "file": "docs/terms.md", "line": 2, "surface": "legacy-mini", "role": "subject" },
+    { "key": "canonical-alias", "file": "docs/terms.md", "line": 2, "surface": "canonical-mini", "role": "object" }
+  ],
+  "assertions": [
+    {
+      "assertion_id": "claim-assertion:c4-mini-source-alias",
+      "predicate_lexeme": "is a legacy alias for",
+      "subject_mention_key": "legacy-alias",
+      "object_mention_key": "canonical-alias"
+    },
+    {
+      "assertion_id": "claim-assertion:c4-mini-blocked-alias",
+      "predicate_lexeme": "is explicitly co-designated with",
+      "subject_mention_key": "blocked-doc",
+      "object_mention_key": "blocked-term"
+    }
+  ],
+  "constraints": [
+    { "kind": "source_cited_alias", "left": "legacy-alias", "right": "canonical-alias", "assertion_id": "claim-assertion:c4-mini-source-alias" },
+    { "kind": "exact_defined_term_identity", "left": "canonical-alias", "right": "canonical-definition", "namespace_key": "docs/terms.md", "exact_term": "canonical-mini", "definition_mention_key": "canonical-definition" },
+    { "kind": "source_cited_alias", "left": "blocked-doc", "right": "blocked-term", "assertion_id": "claim-assertion:c4-mini-blocked-alias" },
+    { "kind": "cannot_link", "left": "blocked-doc", "right": "blocked-term", "reason": "fixture source explicitly distinguishes the blocked occurrence" }
+  ],
+  "expected": {
+    "extractor_availability": {
+      "available": [
+        "hcl", "http", "aws", "dependencies", "config", "sql", "sqlite-ddl", "sql-dml",
+        "envelopes", "capabilities", "yaml-catalog", "catalog-records", "declaration-comments",
+        "diagrams", "document-structure", "manifest-completeness", "treesitter-js", "treesitter-swift", "treesitter-kotlin",
+        "treesitter-csharp", "treesitter-python"
+      ],
+      "exclusions": 0
+    },
+    "fixture_files": 8,
+    "extractor_scanned_files": 8,
+    "documentary_only_files": 0,
+    "components": 3,
+    "extract_facts": 23,
+    "fact_kinds": 8,
+    "identity_candidates": 17,
+    "candidate_components": 15,
+    "joined": 3,
+    "unresolved": 13,
+    "cannot_link": 1,
+    "terminal_incomplete": 0,
+    "entity_component_decisions": 14,
+    "resolved_identity_candidates": 16,
+    "unresolved_identity_candidates": 1,
+    "keyed_referents": 14,
+    "shared_referents": 1,
+    "same_string_nonjoin_candidates": 4,
+    "batch_size": 6
+  }
+}
