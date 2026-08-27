@@ -1,6 +1,17 @@
-# Ascrybe
+# Affinity Scrybe (ascrybe)
 
-**Reads your estate. Ascribes only what it can prove.**
+**Turns your repo into a graph — for you and your agents.**
+
+*Affinity* — alchemy's word for which substances take to which.
+*Scry* — to read what cannot be seen directly.
+
+---
+
+![Ascrybe's dashboard showing a document's sections alongside the exact fact each was read from](docs/images/dashboard.png)
+
+*Ascrybe mapping its own repository: a document, the sections inside it, and the exact
+extracted fact behind the selected one — its file, its line, and the frame in which it could be
+refuted.*
 
 Ascrybe maps a software estate into a queryable graph and keeps two things apart that most tools
 merge: what a deterministic extractor **observed** in the code, and what a document **claims**
@@ -66,15 +77,6 @@ runtime config live outside Git by design.
 | [verification](docs/verification.md) | the gates, and why a check that never ran is the worst kind |
 | [before a PR](docs/before-a-pr.md) | proving a fix with a number the bug could not produce |
 | [releasing](docs/releasing.md) | what a release promises, and how each promise is proved |
-
-## Where the name comes from
-
-**Affinity Scrybe** → *ascrybe*.
-
-**Affinity** — the early-chemical term for which substances relate to which.
-**Scry** — to interrogate something you cannot see directly.
-
-It also reads as *ascribe*: to attribute a statement to its source.
 
 ## Status
 
