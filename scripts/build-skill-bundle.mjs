@@ -66,10 +66,15 @@ export function buildSkillBundle({ repository = root, out = join(root, 'dist', '
   }
   // The bundle runs from wherever it was installed, so the instructions cannot name this machine.
   const portable = skill
-    .replace(/cd \/home\/[^\n]*estate-map-runner[^\n]*\n/gu, 'cd "$(dirname "$0")"   # the installed bundle\n')
     .replace(/npm run map:query --/gu, 'node bin/estate-query.mjs --runtime-config "$ASCRYBE_CONFIG"')
-    .replace(/npm run map:cypher --/gu, 'node bin/estate-cypher.mjs --runtime-config "$ASCRYBE_CONFIG"')
-    .replace(/`\/home\/[^`]*estate-map-runner\/main`/gu, 'the installed bundle');
+    .replace(/npm run map:cypher --/gu, 'node bin/estate-cypher.mjs --runtime-config "$ASCRYBE_CONFIG"');
+  // A scrubber keyed to one checkout name goes quiet the moment the checkout is renamed, and a
+  // silent scrubber ships the path it was supposed to remove. Refuse the build instead.
+  const machinePath = /(?:\/home\/|\/Users\/)[^\s`'"]+/u.exec(portable);
+  if (machinePath) {
+    throw new Error(`SKILL.md names a path on this machine (${machinePath[0]}); the bundle installs `
+      + 'elsewhere, so write the instruction relative to the bundle instead.');
+  }
   writeFileSync(join(out, 'SKILL.md'), portable);
   mkdirSync(join(out, 'bin'), { recursive: true });
   // The CLIs run their main block only when process.argv[1] is their own file, so importing one

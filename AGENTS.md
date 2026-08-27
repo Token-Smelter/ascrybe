@@ -15,14 +15,9 @@ See [docs/before-a-pr.md](docs/before-a-pr.md).
 
 ## Canonical repository and custody
 
-`github.com/mikewrather/estate-map-runner` is canonical. The local `origin` bare repository is a
-cache/archive used for worktree coordination; it is not a second publication line. `estate-map` is
-retired. Changes to `main` are delivered through GitHub pull requests, never by rewriting or
-force-pushing a local mirror.
-
-The verified pre-publication full-history bundle is an archive input, not a remotely verified
-runtime dependency. `DESIGN-AUTHORITY-HISTORY-BRIDGE.json` records its intended release location
-and bounded snapshot verification mode.
+The GitHub remote named `origin` is canonical. A local bare repository, where one exists, is a
+cache used for worktree coordination; it is not a second publication line. Changes to `main` are
+delivered through pull requests, never by rewriting or force-pushing a mirror.
 
 **What a clone does not carry.** `.env`, `ascrybe.config.json`, and generated state are not in
 Git. Initialize external custody with `npm run state:init`; it uses
@@ -64,7 +59,7 @@ estate being mapped**. Work that needs a live database, gitignored credentials, 
 repository at a specific commit **cannot run there by construction**. Dispatching it anyway wastes a
 worker and produces a failure that looks like the worker's fault. (Witness: `brew-ef1e4d5b`, where
 the target commit belongs to a *mapped estate* and could never resolve inside an
-*estate-map-runner* worktree.)
+*ascrybe* worktree.)
 
 ## Invariants that outrank convenience
 

@@ -17,7 +17,7 @@ npm run map:query -- contract
 
 Its `contract` must equal this skill's `surface_contract` (`ascrybe/query-surface/v4`). If it
 does not, the installed skill documents a different build — reinstall it from
-`skills/ascrybe/SKILL.md` in the estate-map-runner checkout rather than working around the
+`skills/ascrybe/SKILL.md` in the ascrybe checkout rather than working around the
 difference. The `digest` covers the command set, every command's arguments, **and the data model** — node
 kinds and relation roles. A kind added or a relation re-roled changes it, which is what a skill
 describing the graph's contents needs: adding Assertion nodes changed nothing about the commands,
