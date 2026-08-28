@@ -5,7 +5,7 @@ Two read-only boundaries over one projection. Use one; never reach past them.
 ## Checking the surface before trusting a document
 
 ```bash
-npm run map:query -- contract
+ascrybe query contract
 ```
 
 The `contract` command returns the command set, every command's arguments, **and the data model** —
@@ -51,7 +51,7 @@ does not say what it bounded reads as a complete one.
 For questions the command set does not shape:
 
 ```bash
-npm run map:cypher -- --query 'MATCH (n:EstateNode {projection_id: $projection_id}) RETURN count(n) AS n'
+ascrybe cypher --query 'MATCH (n:EstateNode {projection_id: $projection_id}) RETURN count(n) AS n'
 ```
 
 It refuses write and admin keywords after stripping strings and comments, refuses procedure calls
@@ -68,8 +68,8 @@ identical once drawn.
 
 ## Packaging
 
-`npm run skill:bundle` builds a self-contained copy of this surface — the two entry points, their
-transitive import closure, and instructions with no machine-specific paths. `npm run skill:verify`
+`ascrybe skill bundle` builds a self-contained copy of this surface — the two entry points, their
+transitive import closure, and instructions with no machine-specific paths. `ascrybe skill verify`
 compares an installed bundle's declared contract and digest against the live surface, which
 catches the case a version check alone misses: same commands, changed data model.
 

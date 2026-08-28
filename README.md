@@ -25,10 +25,10 @@ could be refuted — and where no warrant exists, Ascrybe refuses rather than gu
 ## What you get
 
 ```bash
-npm run map:query -- overview                    # the estate, ranked by structure
-npm run map:query -- node --id doc:design/X.md   # a document, its sections, its claims
-npm run map:query -- provenance --id <claim>     # what justifies this, and how
-npm run map:cypher -- --query '...'              # bounded, read-only, projection-scoped
+ascrybe query overview                    # the estate, ranked by structure
+ascrybe query node --id doc:design/X.md   # a document, its sections, its claims
+ascrybe query provenance --id <claim>     # what justifies this, and how
+ascrybe cypher --query '...'              # bounded, read-only, projection-scoped
 ```
 
 Plus a graph dashboard, and a packaged read-only bundle an agent can install.
@@ -55,11 +55,12 @@ See [docs/concepts.md](docs/concepts.md).
 
 ```bash
 git clone <this repository> && cd ascrybe
-npm run setup && npm run state:init
+npm run setup
 cp ascrybe.env.example .env
 cp ascrybe.config.example.json ascrybe.config.json
 # edit the machine-local config, then:
-node scripts/test-fast.mjs
+node scripts/test-fast.mjs        # hermetic: no secret, no database, no model call
+ascrybe --help                    # every verb
 ```
 
 The battery is hermetic: no secret, no database, no model call. Generated state, `.env` and the
@@ -67,8 +68,14 @@ runtime config live outside Git by design.
 
 ## Documentation
 
+Two doors. **[USAGE.md](USAGE.md)** to map an estate and read it — the default.
+**[CONTRIBUTING.md](CONTRIBUTING.md)** to change Ascrybe itself. That is the same line the command
+surface draws: `ascrybe <verb>` acts on an estate, `npm run <script>` acts on Ascrybe.
+
 | | |
 |---|---|
+| [usage](USAGE.md) | install, map, query, package — start here |
+| [contributing](CONTRIBUTING.md) | invariants, gates, PR discipline — only when changing the platform |
 | [concepts](docs/concepts.md) | planes, roles, assertions, adjudication frames, refusal |
 | [architecture](docs/architecture.md) | the five stages, what each costs, generations and promotion |
 | [query surface](docs/query-surface.md) | both read boundaries, bounded views, the contract |

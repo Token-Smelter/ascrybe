@@ -23,8 +23,8 @@ week and $0.0657 the next, when a vendor default moved. A test refuses an unset 
 ## Building a graph
 
 ```bash
-npm run map:project -- --claim-map-shards <path> --code-graph <path>            # stage only
-npm run map:project -- --claim-map-shards <path> --code-graph <path> --promote  # stage and promote
+ascrybe project --claim-map-shards <path> --code-graph <path>            # stage only
+ascrybe project --claim-map-shards <path> --code-graph <path> --promote  # stage and promote
 ```
 
 Staging writes a new generation to the `working` head. Promotion advances `selected` through a
@@ -49,7 +49,7 @@ database — the first version scoped only the read, and would have deleted anot
 ## The dashboard
 
 ```bash
-npm run map:dashboard          # foreground
+ascrybe dashboard          # foreground
 systemctl --user restart ascrybe-dashboard.service   # the LAN service
 ```
 
@@ -60,10 +60,10 @@ one.
 ## Sending a graph to another Ascrybe user
 
 ```bash
-npm run package:projection -- --claim-map-shards <dir> --code-graph <adjacency.json> \
+ascrybe package pack --claim-map-shards <dir> --code-graph <adjacency.json> \
                               --projection-receipt <receipt.json> --out <bundle>
-npm run package:verify -- --bundle <bundle>
-npm run package:load -- --bundle <bundle> [--promote]
+ascrybe package verify --bundle <bundle>
+ascrybe package load --bundle <bundle> [--promote]
 ```
 
 The package ships the projection's **inputs**, not the projection. A recipient who re-derives and

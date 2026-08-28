@@ -76,6 +76,9 @@ export function planInvocation(argv, { environment = process.env, cwd = process.
   };
 }
 
+/** The estate verbs, so a drift check can derive the partition instead of restating it. */
+export const commandNames = () => Object.keys(COMMANDS).sort();
+
 export function usage() {
   const width = Math.max(...Object.keys(COMMANDS).map(name => name.length));
   return ['ascrybe <command> [options]', '', ...Object.entries(COMMANDS).map(([name, command]) =>

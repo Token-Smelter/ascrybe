@@ -66,8 +66,8 @@ export function buildSkillBundle({ repository = root, out = join(root, 'dist', '
   }
   // The bundle runs from wherever it was installed, so the instructions cannot name this machine.
   const portable = skill
-    .replace(/npm run map:query --/gu, 'node bin/estate-query.mjs --runtime-config "$ASCRYBE_CONFIG"')
-    .replace(/npm run map:cypher --/gu, 'node bin/estate-cypher.mjs --runtime-config "$ASCRYBE_CONFIG"');
+    .replace(/ascrybe query/gu, 'node bin/estate-query.mjs --runtime-config "$ASCRYBE_CONFIG"')
+    .replace(/ascrybe cypher/gu, 'node bin/estate-cypher.mjs --runtime-config "$ASCRYBE_CONFIG"');
   // A scrubber keyed to one checkout name goes quiet the moment the checkout is renamed, and a
   // silent scrubber ships the path it was supposed to remove. Refuse the build instead.
   const machinePath = /(?:\/home\/|\/Users\/)[^\s`'"]+/u.exec(portable);

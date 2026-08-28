@@ -12,7 +12,7 @@ Two read-only boundaries over the same projection. Use one; never reach past the
 **Check the surface before trusting these instructions.** This file is a copy and copies drift:
 
 ```bash
-npm run map:query -- contract
+ascrybe query contract
 ```
 
 Its `contract` must equal this skill's `surface_contract` (`ascrybe/query-surface/v4`). If it
@@ -26,10 +26,10 @@ that no longer existed.
 
 ```bash
 # Closed command set — machine-readable affordances, guided traversal
-npm run map:query -- <command> [options]
+ascrybe query <command> [options]
 
 # Bounded Cypher — one validated read-only query, best for joins and aggregation
-npm run map:cypher -- --query '<cypher>' [--parameters '<json>'] [--view selected|working]
+ascrybe cypher --query '<cypher>' [--parameters '<json>'] [--view selected|working]
 ```
 
 The runtime environment supplies Neo4j credentials through the environment-variable names declared in `ascrybe.config.json`. Never print those values. Never connect to Neo4j directly.
@@ -43,7 +43,7 @@ correctness.
 ## Cypher surface
 
 ```bash
-npm run map:cypher -- --query 'MATCH (n:EstateNode {projection_id: $projection_id, kind: "Plugin"}) RETURN n.label AS plugin, n.structural_children AS children ORDER BY children DESC LIMIT 10'
+ascrybe cypher --query 'MATCH (n:EstateNode {projection_id: $projection_id, kind: "Plugin"}) RETURN n.label AS plugin, n.structural_children AS children ORDER BY children DESC LIMIT 10'
 ```
 
 Data model — one generation, scoped by the gateway-supplied `$projection_id`:
@@ -93,7 +93,7 @@ section it sits in; a drawn edge by the fence it was read from. So `node` on a D
 its own sections, and descending from a section reaches the diagrams inside it:
 
 ```bash
-npm run map:query -- node --id "doc:design/features/some-feature.md"
+ascrybe query node --id "doc:design/features/some-feature.md"
 ```
 
 Earlier generations hung every one of these off the SourceCommit instead, which made a Document
@@ -119,14 +119,14 @@ rewrites them. An assertion whose endpoints ground to nothing is honest, not bro
 
 ```bash
 # What does the corpus contradict about itself?
-npm run map:cypher -- --query '
+ascrybe cypher --query '
 MATCH (r:EstateNode {projection_id: $projection_id, kind: "Assertion"})
 WHERE r.properties_json CONTAINS ""predicate": "direct_conflict""
 MATCH (r)-[:ESTATE_EDGE {projection_id: $projection_id, relation: "relates_assertion"}]->(a:EstateNode {projection_id: $projection_id})
 RETURN r.label AS conflict, collect(a.label) AS claims'
 
 # What does one document assert, and could any of it be refuted by code?
-npm run map:cypher -- --parameters '{"doc":"design/features/normative-plane/DESIGN.md"}' --query '
+ascrybe cypher --parameters '{"doc":"design/features/normative-plane/DESIGN.md"}' --query '
 MATCH (a:EstateNode {projection_id: $projection_id, kind: "Assertion"})
   -[:ESTATE_EDGE {projection_id: $projection_id, relation: "asserted_in"}]->
   (d:EstateNode {projection_id: $projection_id}) WHERE d.label = $doc
@@ -153,7 +153,7 @@ A variable-length pattern puts the range before the property map: `-[r:ESTATE_ED
 
 ```bash
 # Every plugins/** file with a literal emit or consume fact for one envelope, with its line
-npm run map:cypher -- --parameters '{"kind":"acceptance.brew_requested"}' --query '
+ascrybe cypher --parameters '{"kind":"acceptance.brew_requested"}' --query '
 MATCH (e:EstateNode {projection_id: $projection_id, kind: "Envelope"}) WHERE e.label = $kind
 MATCH (m:EstateNode {projection_id: $projection_id})-[r:ESTATE_EDGE {projection_id: $projection_id}]->(e)
 WHERE r.relation IN ["emits","consumes"] AND m.label STARTS WITH "plugins/"
@@ -161,13 +161,13 @@ WHERE r.relation IN ["emits","consumes"] AND m.label STARTS WITH "plugins/"
 RETURN DISTINCT r.relation AS direction, m.label AS file, r.properties_json AS witnesses'
 
 # What a plugin composes, by tier
-npm run map:cypher -- --parameters '{"plugin":"task-orchestration"}' --query '
+ascrybe cypher --parameters '{"plugin":"task-orchestration"}' --query '
 MATCH (p:EstateNode {projection_id: $projection_id, kind: "Plugin"}) WHERE p.label = $plugin
 MATCH (p)-[r:ESTATE_EDGE {projection_id: $projection_id, role: "structural"}]->(c:EstateNode {projection_id: $projection_id})
 RETURN r.relation AS relation, c.kind AS kind, count(*) AS n ORDER BY n DESC'
 
 # Blast radius: what depends on a module, two hops out
-npm run map:cypher -- --parameters '{"file":"plugins/task-orchestration/server/index.mjs"}' --query '
+ascrybe cypher --parameters '{"file":"plugins/task-orchestration/server/index.mjs"}' --query '
 MATCH (m:EstateNode {projection_id: $projection_id}) WHERE m.label = $file
 MATCH (d:EstateNode {projection_id: $projection_id})-[r:ESTATE_EDGE*1..2 {projection_id: $projection_id}]->(m)
 WHERE all(e IN r WHERE e.role = "flow")
