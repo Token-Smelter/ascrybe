@@ -57,6 +57,27 @@ It binds the host and port in the config's `dashboard` block. It reads the `sele
 so promoting a generation changes what it serves without a restart — but a config change needs
 one.
 
+## Sending a graph to another Ascrybe user
+
+```bash
+npm run package:projection -- --claim-map-shards <dir> --code-graph <adjacency.json> \
+                              --projection-receipt <receipt.json> --out <bundle>
+npm run package:verify -- --bundle <bundle>
+npm run package:load -- --bundle <bundle> [--promote]
+```
+
+The package ships the projection's **inputs**, not the projection. A recipient who re-derives and
+lands on the same `projection_id` has proof the whole pipeline agreed; one handed the finished rows
+would only have proof that nobody edited the file. Loading refuses a checkout at a different
+Ascrybe commit, because a mismatch there is indistinguishable from corruption.
+
+**A package is the estate, not a summary of it** — verbatim quotes, file paths, declaration names.
+Packing prints what is inside before it writes. Nothing is sanitized by packaging; only the runtime
+config is left behind, along with credentials and the Neo4j store, which is shared with unrelated
+estates and must never be dumped.
+
+Read-span stays unavailable unless the recipient also holds the source at the pinned commit.
+
 ## Cost control
 
 Only the documentary claim extraction costs money, and it is priced per window of document text.
