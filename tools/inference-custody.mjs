@@ -56,7 +56,8 @@ export const emptyInferenceUsage = () => ({
 const hasReportedUsage = usage => Number(usage?.total_tokens || 0) > 0
   || Number(usage?.input_tokens || 0) > 0
   || Number(usage?.output_tokens || 0) > 0;
-const hasReportedCost = usage => usage?.cost_reported === true || Number(usage?.cost || 0) > 0;
+/** Whether a provider actually stated a cost. A zero it never claimed is not a zero. */
+export const hasReportedCost = usage => usage?.cost_reported === true || Number(usage?.cost || 0) > 0;
 
 export function classifyBillingStatus({ outcome, usage, accepted }) {
   if (accepted === false) return 'not_accepted';
