@@ -12,6 +12,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { sha256, stableStringify } from './lib.mjs';
+import { hasReportedCost } from './inference-custody.mjs';
 
 export const SEMANTIC_EXTRACTION_SCHEMA = 'estate-map/semantic-claim-extraction/v2';
 export const SEMANTIC_EXTRACTOR_VERSION = 'semantic-claim-extractor@3-code-shaped-binding';
@@ -337,13 +338,16 @@ export async function extractSemanticClaims({
   let reused = 0;
   let cost = 0;
   // A provider that reports no cost is not a provider that charged nothing. Summing with `|| 0`
-  // made 2,860 paid calls read as $0.00 in the receipt, which is the number a corpus run is priced
-  // from. Unknown stays unknown: the total is a number only when EVERY answer carried one.
+  // made thousands of paid calls read as $0.00 in the receipt, which is the number a corpus run is
+  // priced from. Unknown stays unknown: the total is a number only when EVERY answer carried one.
+  //
+  // Whether a cost was stated is `cost_reported`, not whether a number is present:
+  // `emptyInferenceUsage()` returns `{cost: 0, cost_reported: false}`, so testing the number alone
+  // reads the placeholder as a reported zero -- the exact case the flag exists to distinguish.
   let costComplete = true;
   for (const answer of answers) {
     if (answer.reused) reused += 1; else calls += 1;
-    const answerCost = Number(answer.usage?.cost);
-    if (Number.isFinite(answerCost)) cost += answerCost; else costComplete = false;
+    if (hasReportedCost(answer.usage)) cost += Number(answer.usage.cost) || 0; else costComplete = false;
     const proposals = Array.isArray(answer.payload?.claims) ? answer.payload.claims : null;
     if (!proposals) {
       refusals.push(Object.freeze({

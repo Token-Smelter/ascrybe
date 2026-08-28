@@ -100,9 +100,16 @@ test('a run whose provider reports no cost reports unknown, not zero', async () 
     const priced = await run({ cost: 0.25, input_tokens: 1, output_tokens: 1 });
     assert.equal(priced.receipt.conservation.reported_cost_usd, 0.25);
 
-    // A genuinely free call is a reported zero and stays distinguishable from silence.
-    const free = await run({ cost: 0, input_tokens: 1, output_tokens: 1 });
+    // A genuinely free call is a reported zero and stays distinguishable from silence. A
+    // subscription-billed model reports exactly this, so the zero has to survive as a zero.
+    const free = await run({ cost: 0, cost_reported: true, input_tokens: 1, output_tokens: 1 });
     assert.equal(free.receipt.conservation.reported_cost_usd, 0);
+
+    // `emptyInferenceUsage()` is `{cost: 0, cost_reported: false}`. A number is present and means
+    // nothing; reading it as a reported zero is the defect this whole check exists to prevent.
+    const placeholder = await run({ cost: 0, cost_reported: false, input_tokens: 1, output_tokens: 1 });
+    assert.equal(placeholder.receipt.conservation.reported_cost_usd, null,
+      'an unreported cost carrying a placeholder zero is still unknown');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
