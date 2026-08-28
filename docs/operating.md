@@ -71,5 +71,9 @@ Three things bound it:
   rather than retried. Raise concurrency for throughput, but watch the lost-window count: coverage
   bought back as speed is a bad trade that shows up nowhere else.
 
+`ascrybe.env.example` carries the arithmetic behind each bound — how `window_bytes` trades
+against the hardcoded claim cap, and why the round 512 MiB is above V8's string ceiling — because
+the config those values live in is JSON and cannot hold comments.
+
 Measure before committing to a corpus-sized run. A slice sampled across size deciles in proportion
 to bytes costs a few dollars and replaces an estimate with a rate.
