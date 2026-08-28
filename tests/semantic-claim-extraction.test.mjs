@@ -64,3 +64,46 @@ test('a malformed proposal keeps conservation balanced', async () => {
     });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// A provider that reports no cost read as a run that cost nothing: 2,860 paid calls summed to
+// $0.00 through `Number(usage?.cost || 0)`, and that zero is what a corpus run gets priced from.
+// Unknown must stay unknown, the way the eval protocol already keeps it.
+test('a run whose provider reports no cost reports unknown, not zero', async () => {
+  const root = mkdtempSync(join(process.env.ASCRYBE_SCRATCH_DIR || tmpdir(), 'extract-cost-'));
+  try {
+    const estate = join(root, 'estate');
+    mkdirSync(estate, { recursive: true });
+    writeFileSync(join(estate, 'DESIGN.md'), '# Design\n\nThe runner verifies the digest.\n');
+
+    const answer = usage => ({
+      outcome: 'ok',
+      json: { claims: [{ statement: 'The runner verifies the digest.', claim_kind: 'current_capability',
+        source_status: 'current', decision_status: 'accepted', line: 3,
+        quote: 'The runner verifies the digest.' }] },
+      usage,
+    });
+    const run = async usage => extractSemanticClaims({
+      project: { id: 'fixture', sha: '1'.repeat(40) },
+      materialized_root: estate,
+      tree_manifest: { files: [{ path: 'DESIGN.md' }] },
+      document_paths: ['DESIGN.md'],
+      code_facts: [], checks: [],
+      runner: { complete: async () => answer(usage) },
+      journal_dir: join(root, `journal-${Math.abs(JSON.stringify(usage ?? null).length)}`),
+    });
+
+    const silent = await run({ input_tokens: 1, output_tokens: 1 });
+    assert.equal(silent.receipt.conservation.reported_cost_usd, null,
+      'a provider reporting no cost must not be recorded as costing nothing');
+    assert.ok(silent.receipt.conservation.model_calls > 0, 'the calls were still made');
+
+    const priced = await run({ cost: 0.25, input_tokens: 1, output_tokens: 1 });
+    assert.equal(priced.receipt.conservation.reported_cost_usd, 0.25);
+
+    // A genuinely free call is a reported zero and stays distinguishable from silence.
+    const free = await run({ cost: 0, input_tokens: 1, output_tokens: 1 });
+    assert.equal(free.receipt.conservation.reported_cost_usd, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

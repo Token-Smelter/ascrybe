@@ -245,7 +245,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const conservation = result.receipt.extraction.conservation;
     const coverage = result.receipt.claim_evidence.coverage;
     console.log(`PASS semantic map ${result.receipt.project.id}@${result.receipt.project.sha}`);
-    console.log(`PASS extraction windows=${conservation.windows} calls=${conservation.model_calls} proposed=${conservation.proposed_claims} admitted=${conservation.admitted_claims} refused=${conservation.refused_proposals} cost_usd=${conservation.reported_cost_usd}`);
+    console.log(`PASS extraction windows=${conservation.windows} calls=${conservation.model_calls} proposed=${conservation.proposed_claims} admitted=${conservation.admitted_claims} refused=${conservation.refused_proposals} `
+      + `cost_usd=${conservation.reported_cost_usd === null ? 'unknown (provider reported none)' : conservation.reported_cost_usd}`);
     console.log(`PASS adjudication claims=${coverage.semantic_claims} receipts=${coverage.terminal_receipts} silent_drops=${coverage.silent_drops}`);
     console.log(`PASS verdicts ${canonical(coverage.verdicts)}`);
     console.log(`PASS realizations ${canonical(coverage.realizations)}`);
