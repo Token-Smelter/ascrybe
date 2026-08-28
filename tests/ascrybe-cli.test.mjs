@@ -29,10 +29,24 @@ test('a corpus projection is re-execed with a heap it can finish in', () => {
 test('a grouped command requires one of its verbs and passes it through', () => {
   assert.match(plan(['package']).error, /pack, verify, load/u);
   assert.match(plan(['package', 'squash']).error, /pack, verify, load/u);
-  assert.deepEqual(plan(['package', 'pack', '--out', 'x']).args.slice(-3), ['pack', '--out', 'x']);
   // `skill bundle` is the module's default action, not an argument it would understand.
   assert.deepEqual(plan(['skill', 'bundle']).args, []);
   assert.deepEqual(plan(['skill', 'verify']).args, ['verify']);
+});
+
+// A grouped module reads its subcommand positionally, so injecting the config ahead of the verb
+// put a flag where the subcommand had to be and every `ascrybe package` invocation died on
+// `unknown argument: /path/to/ascrybe.config.json`. The first version of this test asserted
+// `args.slice(-3)`, which looked only at the tail -- past the end the defect lived at. Assert the
+// WHOLE argument vector; a slice cannot catch an ordering bug.
+test('a grouped command keeps its verb first, ahead of any injected config', () => {
+  assert.deepEqual(plan(['package', 'load', '--bundle', 'x']).args,
+    ['load', '--runtime-config', '/work/ascrybe.config.json', '--bundle', 'x']);
+  assert.deepEqual(plan(['package', 'pack', '--out', 'y']).args,
+    ['pack', '--runtime-config', '/work/ascrybe.config.json', '--out', 'y']);
+  // An ungrouped command has no positional head to protect, so config leads as it always did.
+  assert.deepEqual(plan(['query', 'overview']).args,
+    ['--runtime-config', '/work/ascrybe.config.json', 'overview']);
 });
 
 test('the gate battery is not an estate verb', () => {

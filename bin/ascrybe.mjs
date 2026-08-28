@@ -59,20 +59,25 @@ export function planInvocation(argv, { environment = process.env, cwd = process.
   const [name, ...rest] = argv;
   const command = COMMANDS[name];
   if (!command) return { error: name ? `unknown command: ${name}` : null };
+  let verb = null;
   let args = rest;
   if (command.verbs) {
-    const [verb, ...tail] = rest;
-    if (!command.verbs.includes(verb)) {
+    const [held, ...tail] = rest;
+    if (!command.verbs.includes(held)) {
       return { error: `ascrybe ${name} requires one of: ${command.verbs.join(', ')}` };
     }
     // `skill bundle` is the module's default action rather than an argument it accepts.
-    args = name === 'skill' && verb === 'bundle' ? tail : [verb, ...tail];
+    verb = name === 'skill' && held === 'bundle' ? null : held;
+    args = tail;
   }
-  const config = command.config ? resolveRuntimeConfig(args, environment, cwd) : null;
+  const config = command.config ? resolveRuntimeConfig(rest, environment, cwd) : null;
+  // The verb stays FIRST. A grouped module reads its subcommand positionally, so injecting the
+  // config ahead of it puts a flag where the subcommand has to be and the module rejects the path
+  // as an unknown argument. Flags follow the verb; only ungrouped commands take config at the head.
   return {
     execArgv: command.heap ? [`--max-old-space-size=${command.heap}`] : [],
     script: join(root, command.script),
-    args: config ? ['--runtime-config', config, ...args] : args,
+    args: [...(verb ? [verb] : []), ...(config ? ['--runtime-config', config] : []), ...args],
   };
 }
 
