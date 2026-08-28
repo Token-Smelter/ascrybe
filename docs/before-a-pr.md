@@ -81,7 +81,7 @@ npm run verify                                    # the registered gate set ran
 npm run verify:falsifiers                         # the tests can still fail
 node scripts/check-artifact-hygiene.mjs --tracked  # nothing oversized or generated
 node scripts/check-design-authority.mjs            # no record was rewritten
-npm run skill:bundle && npm run skill:verify       # the bundle matches the surface
+ascrybe skill bundle && ascrybe skill verify       # the bundle matches the surface
 git diff --stat -- analysis reviews                 # must be empty
 ```
 

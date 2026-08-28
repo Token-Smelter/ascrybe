@@ -43,7 +43,7 @@ was caught by a gate, because the review package is explicitly outside that gate
 | `npm run verify:falsifiers` | the tests can still fail; a battery that cannot fail proves nothing |
 | `check-artifact-hygiene --tracked` | no oversized or generated payload entered history |
 | `check-design-authority` | governed documents are byte-for-byte what the ledger says |
-| `npm run skill:verify` | the shipped bundle describes the surface it is talking to |
+| `ascrybe skill verify` | the shipped bundle describes the surface it is talking to |
 
 `npm run verify` is the one that catches the class of bug the others cannot: a new gate added and
 never registered runs nowhere. It short-circuits before executing anything if the registry and the
@@ -56,7 +56,7 @@ than one that refuses to start.
 ## The checklist
 
 1. **Battery and gates green**, including the two CI omits.
-2. **Contract digest matches the skill.** `npm run skill:bundle && npm run skill:verify`. If the
+2. **Contract digest matches the skill.** `ascrybe skill bundle && ascrybe skill verify`. If the
    contract moved, `SKILL.md` must declare the new version in the same commit.
 3. **No record rewritten.** `git diff --stat` against `analysis/`, `reviews/`, and every
    `document_id` in the ledger must be empty.
