@@ -42,6 +42,41 @@ const SYMBOL_KIND_BY_NODE_TYPE = {
   assignment: 'variable',
 };
 
+// Containers a declaration may sit inside while still having an unambiguous name path. A `block`
+// is transparent only in the sense that the walk continues through it -- what the block belongs to
+// decides the outcome on the next step, so a class body resolves and a function body refuses.
+// `decorated_definition` wraps a definition without renaming it, and `expression_statement` is the
+// statement wrapper every module-level assignment sits in.
+const SCOPE_PATH_TRANSPARENT = new Set(['block', 'decorated_definition', 'expression_statement']);
+
+/**
+ * The declaration's name path within its file (`Repo.create`), or null when an enclosing scope
+ * cannot be named.
+ *
+ * Every symbol the query matches today is a direct child of the module, so every path is one
+ * element long. The walk exists anyway: without it the field would be a constant that silently
+ * becomes wrong the moment the query is broadened to class bodies, and two classes each declaring
+ * `create` would contend for one identity. Widening the query then yields a qualified path or a
+ * refusal, never a collision.
+ */
+export function scopePathFor(declNode, name) {
+  const path = [name];
+  let node = declNode?.parent;
+  while (node) {
+    if (node.type === 'module') return path;
+    if (SCOPE_PATH_TRANSPARENT.has(node.type)) { node = node.parent; continue; }
+    if (node.type === 'class_definition') {
+      const className = node.childForFieldName('name');
+      if (!className) return null;
+      path.unshift(className.text);
+      node = node.parent;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
 // Naive dotted path assuming the repo root is the source root; merge.mjs
 // re-derives the source-root-relative path independently for resolution.
 function dottedPathFor(file) {
@@ -111,7 +146,12 @@ function scanSymbols(tree, ctx, facts) {
     if (!nameNode || !declNode) continue;
     const symbolKind = SYMBOL_KIND_BY_NODE_TYPE[declNode.type] || declNode.type;
     const { line, column } = pos(nameNode);
-    facts.push(ctx.fact('symbol', line, { name: nameNode.text, symbol_kind: symbolKind, column }));
+    // Without this the identity candidate generator refuses every Python symbol as
+    // `declaration_scope_not_nameable`, which is how an estate of 4,772 Python modules produced a
+    // code plane of 140 symbols and left every documentary claim with nothing to bind to.
+    const scopePath = scopePathFor(declNode, nameNode.text);
+    facts.push(ctx.fact('symbol', line, { name: nameNode.text, symbol_kind: symbolKind, column,
+      ...(scopePath ? { scope_path: scopePath } : {}) }));
   }
 }
 
