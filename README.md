@@ -4,6 +4,7 @@
 
 *Affinity* — alchemy's word for which substances take to which.
 *Scry* — to read what cannot be seen directly.
+*be* — not alchemy. The two letters that make the reader a scribe.
 
 ---
 
