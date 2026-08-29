@@ -99,14 +99,19 @@ export function buildSkillBundle({ repository = root, out = join(root, 'dist', '
     ].join('\n'));
   }
   const contract = querySurfaceContract();
+  const entryPoints = ['bin/estate-query.mjs', 'bin/estate-cypher.mjs'];
   const manifest = {
-    schema: 'estate-map/skill-bundle/v1',
+    schema: 'ascrybe/skill-bundle/v1',
     surface_contract: ESTATE_QUERY_CONTRACT_VERSION,
     contract_digest: contract.digest,
     // Named, never valued: the consumer supplies the config and the credentials it points at.
     requires: { runtime_config: 'ASCRYBE_CONFIG', credentials: 'named by the runtime config, never bundled' },
-    files: files.length,
-    entry_points: ['bin/estate-query.mjs', 'bin/estate-cypher.mjs'],
+    // `files` counted only the import closure, so it disagreed with what an installed bundle
+    // visibly contains and read as a miscount rather than a different question. Count each thing
+    // separately and let the total be the total.
+    modules: files.length,
+    entry_points: entryPoints,
+    files: files.length + entryPoints.length + 2,
   };
   writeFileSync(join(out, 'bundle.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return Object.freeze({ ...manifest, out, bundled_files: files });
