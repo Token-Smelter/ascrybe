@@ -404,7 +404,7 @@ function absorb(cluster, signal) {
  * (deterministic normalization, not similarity), and an abbreviation merges into
  * its expansion ONLY when the two candidate sets share a witness context (same
  * component subtree -- e.g. a `wo-` mint site and a `work_order.*` emission both
- * under plugins/task-orchestration). Name similarity alone NEVER merges; an
+ * under plugins/work-dispatch). Name similarity alone NEVER merges; an
  * abbreviation whose expansion is observed elsewhere with no shared context is
  * reported as an AMBIGUOUS merge and the clusters stay separate.
  */

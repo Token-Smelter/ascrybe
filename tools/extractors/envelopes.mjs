@@ -1,6 +1,6 @@
 // ENVELOPE-FLOW extractor.
 //
-// the host runtime is an event-driven substrate: plugins, the recipe-engine runtime
+// the host runtime module is an event-driven substrate: plugins, the recipe-engine runtime
 // and Patterns couple by EMITTING and CONSUMING envelopes on the bus, not by
 // importing each other. The import graph therefore misses the architecture
 // almost entirely. This extractor emits one `envelope_flow` fact per site that
@@ -13,43 +13,43 @@
 //
 // EMIT idioms
 //   manifest_publishes      plugins/<p>/plugin.yaml `publishes_envelopes:` list
-//                           (e.g. plugins/recipe-engine/plugin.yaml:39-41)
+//                           (e.g. plugins/workflow-engine/plugin.yaml:39-41)
 //   envelope_object_literal an envelope object literal: `kind: "x.y"` beside
 //                           the envelope schema's `source_kind:` sibling, or
 //                           inside an `envelopes.emit(` / `envelopeBus.emit(`
 //                           call. Covers the three real construction shapes:
-//                           inline in the emit call (plugins/task-orchestration/
+//                           inline in the emit call (plugins/work-dispatch/
 //                           server/index.mjs:3256), built into a variable then
-//                           emitted later (plugins/recipe-engine/runtime/
+//                           emitted later (plugins/workflow-engine/runtime/
 //                           runtime.mjs:9477-9488), and the substrate's own
 //                           bus (src/app.mjs:1712-1725, `session.spawned`).
 //   emit_call               a wrapper call with a literal kind first argument,
 //                           `emit("brew.started", …)` / `emitLivenessEnvelope(
 //                           "work_order.liveness_poke_sent", …)`
-//                           (e.g. plugins/task-orchestration/server/
+//                           (e.g. plugins/work-dispatch/server/
 //                           sessionLivenessWatcher.mjs:1092)
 //   envelope_kind_table     a frozen state->kind map whose values are emitted
 //                           by a shared transition helper
-//                           (plugins/task-orchestration/server/
+//                           (plugins/work-dispatch/server/
 //                           workOrderTransitionEnvelope.mjs:16-30)
 //
 // CONSUME idioms
 //   manifest_subscribes_legacy    plugins/<p>/plugin.yaml `subscribes_to:` list
-//                           (e.g. plugins/task-orchestration/plugin.yaml:192+)
+//                           (e.g. plugins/work-dispatch/plugin.yaml:192+)
 //   manifest_subscribes_validated plugins/<p>/plugin.yaml `subscribes_envelopes:`
 //                           list — the key the loader SHAPE-CHECKS (see below)
 //   envelopes_subscribe     `context.envelopes.subscribe("kind", id, handler)`
-//                           (e.g. plugins/session-compaction/server/index.mjs:20)
+//                           (e.g. plugins/session-trim/server/index.mjs:20)
 //   pattern_rule_on         a Pattern rule trigger `on: { kind: "x.y" }`
-//                           (e.g. plugins/recipe-engine/patterns/single-task.mjs:106)
+//                           (e.g. plugins/workflow-engine/patterns/single-task.mjs:106)
 //   envelope_kind_equality  a runtime branch on the received envelope's kind,
 //                           `env.kind === "brew.stalled"`
-//                           (e.g. plugins/task-orchestration/server/
+//                           (e.g. plugins/work-dispatch/server/
 //                           brewPromptPolicy.mjs:42)
 //
 // DELIBERATE NON-IDIOMS (precision over recall — see report §3.4):
 //   * `new Set([...])` kind registries such as KNOWN_RULE_ENVELOPE_KINDS
-//     (plugins/recipe-engine/patterns/validate.mjs:170) are ALLOWLISTS. The
+//     (plugins/workflow-engine/patterns/validate.mjs:170) are ALLOWLISTS. The
 //     module neither emits nor consumes those kinds, so no fact is emitted.
 //   * a dynamic kind (variable, template literal, concatenation) is not
 //     groundable to a kind name and is skipped rather than guessed.
@@ -113,10 +113,10 @@ const SUBSCRIBE_CALL = /envelopes\s*\.\s*subscribe\s*\(\s*(["'])([^"'`]+)\1/;
 // this reader can ground — but it is not nothing: it is proof that the plugin
 // reaches the bus through a path this extractor cannot follow. Two real cases
 // on this branch make the distinction load-bearing for the wiring assessment:
-//   plugins/episodic-memory/server/index.mjs:607 subscribes with a `kind`
+//   plugins/session-notes/server/index.mjs:607 subscribes with a `kind`
 //     parameter, iterating the manifest list — its eight declarations really
 //     ARE wired, and calling them `declared_unwired` would be a false accusation;
-//   plugins/task-intents/server/index.mjs:4021-4026 loops
+//   plugins/task-goals/server/index.mjs:4021-4026 loops
 //     `for (const kind of FAILURE_THRESHOLD_KINDS)` around a subscribe.
 // Emitting these as facts is what lets manifest-wiring.mjs answer
 // `undeterminable` instead of guessing in either direction.
@@ -128,9 +128,9 @@ const LEADING_STRING_ARGUMENT = /^\s*(["'])([^"'`]+)\1\s*,/;
 // is the difference between "this plugin reaches this kind through a path I
 // cannot follow" and "this plugin never names this kind at all". Both real
 // forms on this branch:
-//   plugins/recipe-engine/runtime/acceptanceDischarge.mjs:3
+//   plugins/workflow-engine/runtime/acceptanceDischarge.mjs:3
 //     `export const ACCEPTANCE_DISCHARGE_KIND = "acceptance.discharged";`
-//   plugins/task-intents/server/index.mjs:108-111
+//   plugins/task-goals/server/index.mjs:108-111
 //     `const FAILURE_THRESHOLD_KINDS = [ "failure.threshold_crossed", … ];`
 const KIND_CONSTANT = /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(["'])([a-z][a-z0-9_.]*)\1\s*;?\s*$/;
 const KIND_LIST_ELEMENT = /^\s*(["'])([a-z][a-z0-9_.]*)\1\s*,\s*(?:\/\/.*)?$/;
@@ -209,7 +209,7 @@ function isEnvelopeObject(lines, index) {
  * Does a literal `kind: "x.y"` sit within the envelope window of an emit call?
  * The window is SYMMETRIC, exactly as isEnvelopeObject's is: the estate builds
  * an envelope into a variable and emits it several lines LATER
- * (plugins/recipe-engine/runtime/runtime.mjs:9477-9488), so a forward-only
+ * (plugins/workflow-engine/runtime/runtime.mjs:9477-9488), so a forward-only
  * search would call that groundable emit dynamic.
  */
 function hasLiteralKindNear(lines, index) {
@@ -259,7 +259,7 @@ function scanCode(lines, ctx) {
     if (subscribe) push(index + 1, subscribe[2], 'consume', 'envelopes_subscribe');
     else if (SUBSCRIBE_CALL_ANY.test(line)) {
       // The arguments may start on the next line, which
-      // plugins/task-intents/server/index.mjs:4022 really writes.
+      // plugins/task-goals/server/index.mjs:4022 really writes.
       const continuation = (lines[index + 1] || '').match(LEADING_STRING_ARGUMENT);
       if (continuation && isEnvelopeKind(continuation[2])) push(index + 2, continuation[2], 'consume', 'envelopes_subscribe');
       else facts.push(ctx.fact('envelope_dynamic_site', index + 1, { direction: 'consume', idiom: 'envelopes_subscribe_dynamic_kind' }));
@@ -285,8 +285,8 @@ function scanCode(lines, ctx) {
     if (emitCall && !EMIT_OBJECT_OPEN.test(line)) push(index + 1, emitCall[2], 'emit', 'emit_call');
     // A bus emit whose envelope object carries NO literal `kind:` in the
     // window — the `{ kind, payload }` shorthand every wrapper writes, e.g.
-    // plugins/failure-observatory/server/index.mjs:364-365 and
-    // plugins/project-registry/server/index.mjs:845 (a ternary kind).
+    // plugins/fault-watch/server/index.mjs:364-365 and
+    // plugins/project-index/server/index.mjs:845 (a ternary kind).
     if (EMIT_OBJECT_OPEN.test(line) && !hasLiteralKindNear(lines, index)) {
       facts.push(ctx.fact('envelope_dynamic_site', index + 1, { direction: 'emit', idiom: 'envelopes_emit_dynamic_kind' }));
     }

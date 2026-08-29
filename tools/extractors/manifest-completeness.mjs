@@ -26,8 +26,8 @@
 // WHERE THE VOCABULARY COMES FROM (source-grounded, not invented). The keys
 // below are the literals the substrate's own manifest validator names:
 // `REQUIRED = ["name","version","api_version","entry_point"]` at
-// src/substrate/pluginManifest.mjs:31, and the six list-shaped fields at
-// src/substrate/pluginManifest.mjs:46
+// src/runtime/plugin-context.mjs:31, and the six list-shaped fields at
+// src/runtime/plugin-context.mjs:46
 // (`provides_capabilities`, `requires_capabilities`, `publishes_envelopes`,
 // `subscribes_envelopes`, `http_routes`, `state_machines`), plus
 // `session_affordances` (validated at the same site) and `subscribes_to` (the
@@ -48,14 +48,14 @@ const MANIFEST_PATTERN = /(?:^|\/)plugin\.ya?ml$/i;
 const COMMENT_TEXT_CAP = 400;
 const COMMENT_CAP = 200;
 
-// See header: every entry is a literal read off src/substrate/pluginManifest.mjs.
+// See header: every entry is a literal read off the host runtime module
 export const MANIFEST_KEY_VOCABULARY = Object.freeze([
   'name', 'version', 'api_version', 'entry_point',
   'provides_capabilities', 'requires_capabilities',
   'publishes_envelopes', 'subscribes_envelopes', 'subscribes_to',
   'http_routes', 'state_machines', 'session_affordances',
 ]);
-export const VOCABULARY_SOURCE = 'src/substrate/pluginManifest.mjs REQUIRED + validateManifest list-shaped fields';
+export const VOCABULARY_SOURCE = 'src/runtime/manifest.mjs REQUIRED + validateManifest list-shaped fields';
 
 const cap = (text) => {
   const value = String(text ?? '');

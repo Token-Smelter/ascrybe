@@ -2,7 +2,7 @@
 // ESTATE-MAP CAMPAIGN — the independent-verification candidate generator (VCEC Arm 2/3).
 //
 // WHAT THIS IS. This is the FIRST genuinely model-dependent estate-map stage. Forensic
-// archaeology (brew-88761b08) proved that every prior "neural" L1 run was a the host runtime worker
+// archaeology (brew-88761b08) proved that every prior "neural" L1 run was a the host runtime module worker
 // hand-transcribing verdicts into a committed JS literal (examples/l1-run1/build-verdicts.mjs)
 // with ZERO provider calls. This module wires the real thing: it BRIDGES the already-landed
 // deterministic `l1-adjudicate prepare -> ingest -> reduce/apply` boundary by making REAL

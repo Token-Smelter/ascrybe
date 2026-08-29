@@ -61,7 +61,7 @@ function codeGraph() {
       'doc:docs/design.md': { k: 'entity', l: 'docs/design.md', ns: 'document', r: 'document' },
       'doc:docs/INDEX.md': { k: 'entity', l: 'docs/INDEX.md', ns: 'document', r: 'document' },
       'referent:query': { k: 'entity', l: 'queryGraph', ns: 'fixture/src/query.mjs', r: 'symbol' },
-      'referent:plugin': { k: 'entity', l: 'task-orchestration', ns: 'plugins/task-orchestration/plugin.yaml', r: 'yaml_document' },
+      'referent:plugin': { k: 'entity', l: 'work-dispatch', ns: 'plugins/work-dispatch/plugin.yaml', r: 'yaml_document' },
       'referent:capability': { k: 'entity', l: 'brew', ns: '["fixture","capability"]', r: 'capability_flow' },
       'referent:envelope': { k: 'entity', l: 'brew.started', ns: '["fixture","envelope"]', r: 'envelope_flow' },
       'referent:potion': { k: 'entity', l: 'builtin/single-task', ns: '["fixture","example.recipe/v1"]', r: 'yaml_document' },

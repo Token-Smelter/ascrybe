@@ -7,12 +7,12 @@
 //   D13 (the round's ONLY map-unique find) — `subscribes_envelopes` is a
 //     declaration, not a handler binding: `validateEnvelopeEntries` checks
 //     `kind` / `version` / `subscriber_id` and never imports a handler
-//     (src/substrate/pluginManifest.mjs:71-93). The real subscription API is
+//     (src/runtime/plugin-context.mjs:71-93). The real subscription API is
 //     `context.envelopes.subscribe`.
 //   N1 (HIGH, found by NEITHER arm) — `requires_capabilities` entries carry
-//     `optional: true` (plugins/task-intents/plugin.yaml:82-91) and the
+//     `optional: true` (plugins/task-goals/plugin.yaml:82-91) and the
 //     consuming wrappers swallow the absence into a `null`
-//     (plugins/task-intents/server/index.mjs:176-178,:180-187), so an absent
+//     (plugins/task-goals/server/index.mjs:176-178,:180-187), so an absent
 //     provider is indistinguishable from an empty answer.
 //
 // Both are the SAME shape one level up: a declaration is a promise, and the
@@ -61,12 +61,12 @@ export const MANIFEST_WIRING_REASONS = Object.freeze([
 // grounding pass against real source found that verdict FALSE in three
 // independent places, all for the same reason: the estate reaches the bus and
 // the registry through paths a line-oriented reader cannot follow.
-//   plugins/episodic-memory/server/index.mjs:607 subscribes with a `kind`
+//   plugins/session-notes/server/index.mjs:607 subscribes with a `kind`
 //     parameter, iterating its own manifest list — all eight of its declared
 //     subscriptions really are wired;
-//   plugins/task-intents/server/index.mjs:4021-4026 loops
+//   plugins/task-goals/server/index.mjs:4021-4026 loops
 //     `for (const kind of FAILURE_THRESHOLD_KINDS)` around a subscribe;
-//   plugins/project-registry/server/index.mjs:845 emits
+//   plugins/project-index/server/index.mjs:845 emits
 //     `emit(created ? "bundle.created" : "bundle.updated", …)` — a ternary.
 // So a plugin that contains ANY dynamic site of the same direction gets
 // `undeterminable` with that site cited, never an accusation. The sharper
@@ -100,7 +100,7 @@ export function deriveManifestWiring(facts) {
   // ---- CAPABILITY DECLARATIONS ----------------------------------------
   // The binding idiom is the code `capabilities.provide(` / `.require(` call in
   // the declaring plugin — the substrate surface at
-  // src/substrate/pluginContext.mjs:357-364. A manifest entry alone registers
+  // src/runtime/plugin-context.mjs:357-364. A manifest entry alone registers
   // nothing: pluginManifest.mjs shape-checks the list and never imports a
   // handler, which is D13's insight applied to the capability family.
   for (const declaration of capabilityFacts.filter(fact => fact.source === 'manifest')) {
@@ -134,7 +134,7 @@ export function deriveManifestWiring(facts) {
         ? `plugin '${owner}' calls capabilities.${declaration.direction}("${declaration.capability_type}", …) at ${bindings.length} site(s)`
         : nonLiteral.length
           ? `plugin '${owner}' has ${nonLiteral.length} capabilities.${declaration.direction}( call(s) whose TYPE argument is not a string literal, so this declaration may or may not be the one they bind; neither 'wired' nor 'declared_unwired' is honest`
-          : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.capability_type}' and contains no capabilities.${declaration.direction}("${declaration.capability_type}", …) call; the manifest list is shape-checked (src/substrate/pluginManifest.mjs:46) and binds no handler`,
+          : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.capability_type}' and contains no capabilities.${declaration.direction}("${declaration.capability_type}", …) call; the manifest list is shape-checked (src/runtime/plugin-context.mjs:46) and binds no handler`,
       declaration: witness(declaration),
       wiring_witnesses: sortWitnesses(bindings.map(witness)),
       undeterminable_witnesses: sortWitnesses(nonLiteral.map(witness)),
@@ -196,7 +196,7 @@ export function deriveManifestWiring(facts) {
           ? `'${declaration.envelope_kind}' is a prefix wildcard; it names no single kind, so no single binding site can confirm or refute it`
           : dynamic.length
             ? `plugin '${owner}' has ${dynamic.length} ${declaration.direction} site(s) whose kind is not a literal (a loop over a kind list, a shorthand \`{ kind }\`, a ternary), so this declaration may be bound through one of them; neither 'wired' nor 'declared_unwired' is honest`
-            : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.envelope_kind}', contains no ${bindingIdiom ? '`context.envelopes.subscribe`' : 'emit'} site for it, and has no ${declaration.direction} site with a non-literal kind that could reach it; src/substrate/pluginManifest.mjs:71-93 validates kind/version/subscriber_id and never imports a handler, so the declaration alone binds nothing`,
+            : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.envelope_kind}', contains no ${bindingIdiom ? '`context.envelopes.subscribe`' : 'emit'} site for it, and has no ${declaration.direction} site with a non-literal kind that could reach it; src/runtime/plugin-context.mjs:71-93 validates kind/version/subscriber_id and never imports a handler, so the declaration alone binds nothing`,
       declaration: witness(declaration),
       wiring_witnesses: sortWitnesses(bindings.map(witness)),
       undeterminable_witnesses: sortWitnesses([...related, ...dynamic].map(witness)),
@@ -208,7 +208,7 @@ export function deriveManifestWiring(facts) {
   // ---- HTTP ROUTE DECLARATIONS ----------------------------------------
   // The manifest's `http_routes:` block is the declaration ceiling
   // registerRoute() enforces; the real registration is `context.http.route`
-  // (src/substrate/pluginContext.mjs:366-370), which the route extractor
+  // (src/runtime/plugin-context.mjs:366-370), which the route extractor
   // already grounds to a MOUNTED path. A declaration is wired when a real
   // registration with the same method mounts at the same path.
   for (const declaration of routeDeclarations) {
@@ -265,9 +265,9 @@ export function manifestWiringCensus(records) {
     // The sharpest statement this instrument can make WITHOUT a false positive:
     // the declaring plugin reaches the bus/registry through a path this reader
     // cannot follow, AND the declared subject appears nowhere in that plugin's
-    // own code. `recipe-engine` / `brew.awaiting_human_verdict` is the case this
+    // own code. `workflow-engine` / `brew.awaiting_human_verdict` is the case this
     // list was built to surface — its own manifest comment at
-    // plugins/recipe-engine/plugin.yaml:106 says "emit site pending".
+    // plugins/workflow-engine/plugin.yaml:106 says "emit site pending".
     undeterminable_without_any_literal_occurrence: byStatus('undeterminable')
       .filter(record => !record.subject_occurrences_in_plugin).map(record => record.id),
     // N1's exact shape, surfaced as data: an OPTIONAL requirement whose binding
