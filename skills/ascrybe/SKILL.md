@@ -9,6 +9,18 @@ description: Use when asked to inspect a software estate, find claims or entitie
 
 Two read-only boundaries over the same projection. Use one; never reach past them.
 
+**Before anything else, point at a runtime config.** Every command below needs one, and nothing
+supplies it for you: no installer, service, or agent runtime sets `ASCRYBE_CONFIG`. It is a
+machine-local file naming the Neo4j connection's environment variables (never their values), so it
+is not in this bundle and cannot be. Ask the operator for the path, then:
+
+```bash
+export ASCRYBE_CONFIG=/absolute/path/to/ascrybe.config.json
+```
+
+The credentials that config names must also be in the environment. Without both, every command
+below fails at the connection rather than doing anything harmful.
+
 **Check the surface before trusting these instructions.** This file is a copy and copies drift:
 
 ```bash
@@ -119,9 +131,9 @@ rewrites them. An assertion whose endpoints ground to nothing is honest, not bro
 
 ```bash
 # What does the corpus contradict about itself?
-ascrybe cypher --query '
+ascrybe cypher --parameters '{"predicate":"\"predicate\": \"direct_conflict\""}' --query '
 MATCH (r:EstateNode {projection_id: $projection_id, kind: "Assertion"})
-WHERE r.properties_json CONTAINS ""predicate": "direct_conflict""
+WHERE r.properties_json CONTAINS $predicate
 MATCH (r)-[:ESTATE_EDGE {projection_id: $projection_id, relation: "relates_assertion"}]->(a:EstateNode {projection_id: $projection_id})
 RETURN r.label AS conflict, collect(a.label) AS claims'
 
@@ -218,8 +230,10 @@ read-span --id CODEFACT_ID [--before N] [--after N] [--view ...]
 
 ## Three-arm evaluation workflow
 
-Use `node tools/eval/cli.mjs --config /absolute/external-config.json` only for a prepared,
-external study. The harness runs the same model with the same turn budget in fresh filesystem,
+**Not reachable from this bundle.** The evaluation harness ships with the full Ascrybe checkout,
+not with the read-only skill, because it spends money and writes results. Run
+`ascrybe eval --config /absolute/external-config.json` from a checkout, and only for a
+prepared, external study. The harness runs the same model with the same turn budget in fresh filesystem,
 graph, and additive filesystem+graph contexts, then treats `both_minus_filesystem` as its primary
 effect while retaining `graph_minus_filesystem` and `both_minus_graph` as diagnostics.
 
