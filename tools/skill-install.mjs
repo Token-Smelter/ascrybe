@@ -50,7 +50,23 @@ export function priorInstallOf(path, { read = p => readFileSync(p, 'utf8') } = {
 
 /** The skills directory to install into, or the reason there is not one. */
 export function resolveSkillsDir({ into, skills_dir: skillsDir = null }) {
-  if (skillsDir) return resolve(skillsDir);
+  // A named directory is obeyed wherever it is -- the refusal below is about GUESSING a location,
+  // and once someone names one there is nothing left to guess. It must exist, though: a path that
+  // does not is far more often a typo than an instruction, and creating it puts the skill
+  // somewhere nothing reads while reporting success.
+  if (skillsDir) {
+    const named = resolve(skillsDir);
+    if (!existsSync(named)) {
+      throw installError('SKILL_INSTALL_SKILLS_DIR_ABSENT',
+        `--skills-dir ${named} does not exist; create it if that is really where skills live here`,
+        { skills_dir: named });
+    }
+    if (!statSync(named).isDirectory()) {
+      throw installError('SKILL_INSTALL_SKILLS_DIR_NOT_A_DIRECTORY', `--skills-dir ${named} is not a directory`,
+        { skills_dir: named });
+    }
+    return named;
+  }
   const held = resolve(into, DEFAULT_SKILLS_DIR);
   if (existsSync(held)) return held;
   // Creating `.pi/agent/skills` in a project with no `.pi/agent` invents a convention the project

@@ -69,8 +69,9 @@ The bundle carries the two read CLIs and their instructions, and deliberately ca
 projection, the credentials, nor the runtime config.
 
 `install` refuses more than it does, because hand-copying is what leaves a stale skill behind. It
-will not invent a skills directory in a project that has no convention for one (pass `--skills-dir`
-to say where), will not delete a directory it cannot identify as a previous install of this skill,
+will not invent a skills directory in a project that has no convention for one — though
+`--skills-dir` is obeyed wherever it points, inside the project or not, provided it already exists.
+It will not delete a directory it cannot identify as a previous install of this skill,
 and will not report success until each installed entry point loads from its new home and refuses an
 empty config. It writes `INSTALL.json` recording which Ascrybe commit produced the copy — the
 contract digest can say a bundle describes a different surface, but not which build it came from.
