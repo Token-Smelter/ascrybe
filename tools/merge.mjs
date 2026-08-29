@@ -166,7 +166,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
 
   // HTTP ROUTES. `fact.route` is the MOUNTED path: for the plugin idiom the
   // extractor reconstructs `/api/plugins/<owner>/<declared>` from the real
-  // registration in src/substrate/pluginContext.mjs and keeps the quoted
+  // registration in src/runtime/plugin-context.mjs and keeps the quoted
   // `declared_route` beside it, so the node id cannot collide across plugins
   // (six plugins declare `/health`).
   //
@@ -179,7 +179,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
   // F7 (orientation-test-report.md §7.2). A SYNTHESIZED field must carry the
   // site that justifies it. `derived_value_producer` facts name where a derived
   // value is really produced (extractors/http.mjs emits one for `mount_prefix`
-  // at src/substrate/pluginContext.mjs:368); the join below attaches that
+  // at src/runtime/plugin-context.mjs:368); the join below attaches that
   // file:line to every route node whose mount was reconstructed rather than
   // quoted. When no producer fact exists in the repo the node carries an
   // explicit typed refusal instead of a silently missing field — a derived
@@ -332,7 +332,29 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
   }
 
   const configUrls=facts.filter(fact=>['config_value_url','config_value_template'].includes(fact.kind));
-  const clientFacts=facts.filter(fact=>fact.kind==='http_client');
+  // A call site that names a constant instead of a literal is not a call to nowhere. Every
+  // Retrofit annotation in a real client reads `@GET(ApiRoutes.Worlds.WORLDS)`, and the constant
+  // it names is declared in the same repository. Resolving it here -- across files, which no
+  // per-file extractor can do -- turns a named reference into an address, and records that the
+  // address was derived rather than quoted.
+  const constantsByRepo=new Map();
+  for(const fact of facts.filter(fact=>fact.kind==='string_constant')){
+    const byName=constantsByRepo.get(fact.repo)||new Map();
+    if(!byName.has(fact.qualified_name))byName.set(fact.qualified_name,fact);
+    constantsByRepo.set(fact.repo,byName);
+  }
+  const resolveConstantPath=fact=>{
+    if(fact.url_or_path||!fact.path_constant)return fact;
+    const declared=constantsByRepo.get(fact.repo)?.get(fact.path_constant)
+      // A reference may cite a trailing portion of the qualified name it was declared under.
+      ||[...(constantsByRepo.get(fact.repo)||new Map()).entries()].find(([name])=>fact.path_constant.endsWith(name)||name.endsWith(fact.path_constant))?.[1];
+    if(!declared)return fact;
+    const value=String(declared.value||'');
+    if(!value.startsWith('/'))return fact;
+    return {...fact,url_or_path:value,path:value,target_basis:'constant_reference_resolved',
+      path_constant_declared_at:{repo:declared.repo,file:declared.file,line:declared.line}};
+  };
+  const clientFacts=facts.filter(fact=>fact.kind==='http_client').map(resolveConstantPath);
   const repoHints=repo=>{
     const reads=readConfigs.filter(fact=>fact.repo===repo);
     return [
@@ -341,8 +363,18 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
       ...reads.map(fact=>({fact,value:fact.key_name,matchedSegment:allDeclaredConfigs.map(match=>tailMatches(match.f.key_name,fact.key_name)).filter(Boolean).sort((a,b)=>b.length-a.length||a.localeCompare(b))[0]||null})),
     ];
   };
+  // A repository that declares the host it serves needs no name-similarity guess, and outranks
+  // one: the domain is quoted from a tracked file, while token overlap is inference that fails
+  // outright on any repository whose name reduces to no tokens.
+  const declaredHosts=new Map();
+  for(const fact of facts.filter(fact=>fact.kind==='service_hostname')){
+    const held=declaredHosts.get(fact.repo)||new Set();
+    held.add(String(fact.host||'').toLowerCase());
+    declaredHosts.set(fact.repo,held);
+  }
   const hintScore=(value,repo)=>{
     let host='';try{host=new URL(value).hostname.toLowerCase();}catch{host=String(value).toLowerCase();}
+    if(declaredHosts.get(repo)?.has(host))return 3;
     const repoSlug=slug(repo);if(host.includes(repoSlug))return 2;
     return tokens(repo).some(token=>tokens(host).includes(token))?1:0;
   };
@@ -360,7 +392,13 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     return matches.sort((a,b)=>a.id.localeCompare(b.id));
   };
 
-  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&!isTestRepo(fact.repo))){
+  // A reference whose constant was never found has no address to match on. It is a recorded
+  // outcome, not a crash and not a silent drop: the call exists, and what could not be resolved
+  // is named.
+  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&!fact.url_or_path)){
+    addUnmatched('http_call_path_unresolved',fact);
+  }
+  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&fact.url_or_path&&!isTestRepo(fact.repo))){
     const matches=matchingRoutes(fact,repoHints(fact.repo));
     if(!matches.length){addUnmatched('http_call_candidate',fact);continue;}
     const hintFacts=[...new Map(matches.filter(match=>match.hint&&match.hint!==fact).map(match=>[factKey(match.hint),match.hint])).values()];
@@ -369,7 +407,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     if(matches.length===1)edges.push(edge);else{edge.candidates=matches.map(match=>match.id);addAmbiguous(edge,fact);}
   }
 
-  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&isTestRepo(fact.repo))){
+  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&fact.url_or_path&&isTestRepo(fact.repo))){
     const matches=uniqueByRepo(matchingRoutes(fact,repoHints(fact.repo),{allowUnhinted:true}));
     if(!matches.length){addUnmatched('tests_against',fact);continue;}
     const hintFacts=[...new Map(matches.filter(match=>match.hint&&match.hint!==fact).map(match=>[factKey(match.hint),match.hint])).values()];
@@ -1099,7 +1137,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     node.require_site_count=requirers.length;
     node.call_site_count=callers.length;
     // The PROVIDER is the plugin whose code registers the handler —
-    // src/substrate/capabilityRegistry.mjs:37 stores exactly that `pluginName`.
+    // src/runtime/plugin-context.mjs:37 stores exactly that `pluginName`.
     // Two plugins registering the same type is a real conflict the registry
     // throws on at load; the node records both rather than picking one.
     node.providers=[...new Set(providers.map(edge=>edge.owner).filter(Boolean))].sort();

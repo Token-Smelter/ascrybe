@@ -8,7 +8,7 @@
 // `extensions/*.ts`."
 //
 // GROUNDED IN THE REAL IDIOM (verified at the base of record — the report's bare
-// `criterion-tools.ts` path resolves to `plugins/task-intents/extensions/
+// `criterion-tools.ts` path resolves to `plugins/task-goals/extensions/
 // criterion-tools.ts`, and the registration shape there is):
 //     pi.registerTool({
 //       name: "declare_ward",                       // :171

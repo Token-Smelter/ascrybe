@@ -3,8 +3,8 @@
 // WHY A SECOND SQL EXTRACTOR EXISTS. `extractors/sql.mjs` matches `filePattern:
 // /\.sql$/i` and emits one `sql_object` fact per `CREATE TABLE/VIEW`. This estate
 // has ZERO `.sql` files: every table is created from a template literal inside a
-// `.mjs` module (`src/substrate/db.mjs:13`, `plugins/recipe-engine/server/
-// index.mjs:6263`, `plugins/task-intents/server/schema.mjs:43`, …). So the shipped
+// `.mjs` module (`src/runtime/plugin-context.mjs:13`, `plugins/workflow-engine/server/
+// index.mjs:6263`, `plugins/task-goals/server/schema.mjs:43`, …). So the shipped
 // SQL extractor finds none of this estate's schema, and the schema is the strongest
 // available evidence for what the platform's ENTITIES are and how they relate.
 //
@@ -19,9 +19,9 @@
 //                     declared primary key columns and the count of columns parsed.
 //   sqlite_ref        one per DECLARED foreign key — either the column-level
 //                     `<col> … REFERENCES <table>(<col>)` form
-//                     (plugins/recipe-engine/server/index.mjs:6293) or the
+//                     (plugins/workflow-engine/server/index.mjs:6293) or the
 //                     table-level `FOREIGN KEY (<col>) REFERENCES <table>(<col>)`
-//                     form (plugins/episodic-memory/server/index.mjs:108).
+//                     form (plugins/session-notes/server/index.mjs:108).
 //   sqlite_id_column  one per FK-SHAPED column that declares NO reference: a
 //                     column whose name ends `_id` (or is exactly `id`). The
 //                     TARGET is deliberately NOT resolved here — a per-file scan
@@ -74,12 +74,12 @@ const TABLE_PRIMARY_KEY = /^\s*PRIMARY\s+KEY\s*\(\s*([^)]+?)\s*\)/i;
 const TABLE_UNIQUE = /^\s*UNIQUE\s*\(\s*([^)]+?)\s*\)/i;
 const ID_COLUMN = /^(?:id|[\w$]+_id)$/i;
 // `CHECK (<col> IN ('a','b'))` is the only place this estate's schema ENUMERATES what a
-// polymorphic id column may point at (plugins/task-intents/server/schema.mjs:236 lists
+// polymorphic id column may point at (plugins/task-goals/server/schema.mjs:236 lists
 // 'intent','work_order','brew','criterion' for initiative_membership.item_kind). Without it,
 // `item_id` is an unresolvable reference; with it, the membership fan-out is a schema fact.
 const CHECK_IN = /\bCHECK\s*\(\s*([A-Za-z_][\w$]*)\s+IN\s*\(([^)]*)\)/i;
 // A `--` line comment, and a `/* */`-free approximation of it. DDL in this estate
-// documents itself heavily (plugins/recipe-engine/server/index.mjs:6328-6334); a
+// documents itself heavily (plugins/workflow-engine/server/index.mjs:6328-6334); a
 // comment that mentions `REFERENCES brews(brew_id)` is prose, not a constraint.
 const stripComment = line => line.replace(/--.*$/, '');
 // A JS comment is PROSE ABOUT the DDL, not DDL. Skipping comment lines is load-bearing, not
@@ -122,7 +122,7 @@ export function parseCreateTables(lines) {
       };
       depth = 1;
       // A single-line `CREATE TABLE x (a TEXT PRIMARY KEY, b TEXT)` closes on its
-      // own line (src/substrate/db.mjs:212 is exactly this shape).
+      // own line (src/runtime/plugin-context.mjs:212 is exactly this shape).
       depth += netParens(after);
       if (depth <= 0) { collectBody(open, after, index + 1); tables.push(finish(open)); open = null; }
       else collectBody(open, after, index + 1);
@@ -132,7 +132,7 @@ export function parseCreateTables(lines) {
     depth += netParens(line);
     // Only a line that STARTS at depth 1 is a column or table constraint of this
     // table; a continuation line inside `CHECK (status IN (...))` starts deeper
-    // (plugins/task-orchestration/server/aggregates/stagedDispatchJob/repo.mjs:105).
+    // (plugins/work-dispatch/server/aggregates/stagedDispatchJob/repo.mjs:105).
     if (before === 1) collectBody(open, line, index + 1);
     if (depth <= 0) { tables.push(finish(open)); open = null; }
   }
@@ -173,7 +173,7 @@ function collectBody(open, line, lineNumber) {
   const foreignKey = line.match(TABLE_FOREIGN_KEY);
   if (foreignKey) {
     // The `REFERENCES` half may sit on the SAME line or the NEXT one
-    // (plugins/episodic-memory/server/index.mjs:108 keeps them together;
+    // (plugins/session-notes/server/index.mjs:108 keeps them together;
     // src/plugin-runtime/sqlInbox.mjs:58-59 splits them). Only the same-line
     // form is groundable from here; the split form is picked up by the
     // pending-reference carry below.

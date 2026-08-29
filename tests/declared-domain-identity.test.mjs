@@ -4,12 +4,12 @@ import {
   identityCandidateDecision, identityCandidateDecisions,
 } from '../tools/identity-candidate-generator.mjs';
 
-const capability = (direction, capability_type, owner = 'controller-host', line = 20) => ({
-  kind: 'capability_flow', repo: 'app', file: 'plugins/controller-host/plugin.yaml', line,
+const capability = (direction, capability_type, owner = 'controller-runtime', line = 20) => ({
+  kind: 'capability_flow', repo: 'app', file: 'plugins/controller-runtime/plugin.yaml', line,
   capability_type, direction, owner, source: 'manifest',
 });
 const envelope = (idiom, envelope_kind, line = 18) => ({
-  kind: 'envelope_flow', repo: 'app', file: 'plugins/episodic-memory/plugin.yaml', line,
+  kind: 'envelope_flow', repo: 'app', file: 'plugins/session-notes/plugin.yaml', line,
   envelope_kind, direction: 'emit', idiom,
 });
 const document = (file, fields) => ({ kind: 'yaml_document', repo: 'app', file, line: 1, ...fields });
@@ -40,7 +40,7 @@ test('a manifest-published envelope kind becomes an entity while code-site traff
 
 test('plugin manifests and typed documents retain declared identity while untyped YAML uses exact file identity', () => {
   assert.deepEqual([
-    document('plugins/recipe-engine/plugin.yaml', { doc_name: 'recipe-engine', api_version: 1 }),
+    document('plugins/workflow-engine/plugin.yaml', { doc_name: 'workflow-engine', api_version: 1 }),
     document('.catalog/potions/factory-investigation.yaml',
       { api_version: 'example.recipe/v1', doc_id: 'factory/investigation' }),
     document('design/features/thing/DESIGN.md.yaml', { api_version: null, doc_id: null }),
@@ -52,8 +52,8 @@ test('plugin manifests and typed documents retain declared identity while untype
       ? { surface: decision.surface, basis: decision.candidate_basis }
       : decision.reason;
   }), [
-    { surface: 'recipe-engine', basis: { kind: 'declared_namespace_identity',
-      namespace_key: '[\n  "app",\n  "plugin"\n]', declared_identifier: 'recipe-engine' } },
+    { surface: 'workflow-engine', basis: { kind: 'declared_namespace_identity',
+      namespace_key: '[\n  "app",\n  "plugin"\n]', declared_identifier: 'workflow-engine' } },
     { surface: 'factory/investigation', basis: { kind: 'declared_namespace_identity',
       namespace_key: '[\n  "app",\n  "example.recipe/v1"\n]', declared_identifier: 'factory/investigation' } },
     { surface: 'design/features/thing/DESIGN.md.yaml', basis: { kind: 'declared_namespace_identity',
@@ -65,8 +65,8 @@ test('plugin manifests and typed documents retain declared identity while untype
 
 test('one capability declared by manifest and code merges, while duplicate typed and path document keys refuse every member', () => {
   const decisions = identityCandidateDecisions([
-    capability('provide', 'brew', 'recipe-engine', 4),
-    { ...capability('provide', 'brew', 'recipe-engine', 91), file: 'plugins/recipe-engine/server/index.mjs' },
+    capability('provide', 'brew', 'workflow-engine', 4),
+    { ...capability('provide', 'brew', 'workflow-engine', 91), file: 'plugins/workflow-engine/server/index.mjs' },
     document('.catalog/potions/one.yaml', { api_version: 'example.recipe/v1', doc_id: 'shared/id' }),
     document('.catalog/potions/two.yaml', { api_version: 'example.recipe/v1', doc_id: 'shared/id' }),
     document('checks/fast.yaml', { api_version: null, doc_id: null }),

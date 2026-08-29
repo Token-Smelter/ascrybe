@@ -239,11 +239,11 @@ export function scanLiteralValues(rootNode, ctx) {
 // extractor closes the first half and NOT the second, and this estate's
 // validators put their real contract in the second:
 //
-//   src/substrate/pluginManifest.mjs:31  const REQUIRED = […]        ← declarator
-//   src/substrate/pluginManifest.mjs:36  /^[a-z0-9][a-z0-9-]*$/.test(name)
-//   src/substrate/pluginManifest.mjs:39  manifest.api_version !== 1
-//   src/substrate/pluginManifest.mjs:138 ["always","env","not_env","bundle"].includes(key)
-//   src/substrate/pluginManifest.mjs:142 cond[key] !== true
+//   src/runtime/plugin-context.mjs:31  const REQUIRED = […]        ← declarator
+//   src/runtime/plugin-context.mjs:36  /^[a-z0-9][a-z0-9-]*$/.test(name)
+//   src/runtime/plugin-context.mjs:39  manifest.api_version !== 1
+//   src/runtime/plugin-context.mjs:138 ["always","env","not_env","bundle"].includes(key)
+//   src/runtime/plugin-context.mjs:142 cond[key] !== true
 //
 // Three of those four are inline literals in TEST position, bound to no name.
 // Q15 asks what constraint is placed on `name` and which `api_version` values

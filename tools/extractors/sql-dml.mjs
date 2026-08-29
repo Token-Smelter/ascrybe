@@ -8,7 +8,7 @@
 //
 // Q20 asks which columns the live `INSERT INTO envelopes` lists that the frozen
 // base DDL does not, and what mechanism reconciles them. The INSERT is at
-// src/substrate/envelopeBus.mjs:48 (verified at the base of record) and the
+// src/runtime/plugin-context.mjs:48 (verified at the base of record) and the
 // pre-F5 map had no fact of any kind for it — `extractors/sqlite-ddl.mjs`
 // parses `CREATE TABLE` only, and `extractors/sql.mjs` matches `.sql` files, of
 // which this estate has none.

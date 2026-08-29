@@ -14,11 +14,11 @@
 //
 // GROUNDED IN THE REAL IDIOMS (verified at the base of record, not assumed):
 //   context.storage.write(`work-orders/${wo.id}/order.json`, …)
-//                       plugins/task-orchestration/server/aggregates/workOrder.mjs:338
+//                       plugins/work-dispatch/server/aggregates/workOrder.mjs:338
 //   context.storage.read("work-orders/index.json")
-//                       plugins/task-orchestration/server/aggregates/workOrder.mjs:247
-//   join(home, "plugins", "recipe-engine", "brews.db")
-//                       plugins/recipe-engine/server/index.mjs:6258
+//                       plugins/work-dispatch/server/aggregates/workOrder.mjs:247
+//   join(home, "plugins", "workflow-engine", "brews.db")
+//                       plugins/workflow-engine/server/index.mjs:6258
 //
 // WHAT IT EXTRACTS.
 //   persistence_target  one per scoped-storage / filesystem call that names a
