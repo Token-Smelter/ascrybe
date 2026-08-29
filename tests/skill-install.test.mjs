@@ -78,9 +78,41 @@ test('a project with no skills convention is refused rather than given one', () 
     mkdirSync(join(root, 'bare'), { recursive: true });
     assert.throws(() => resolveSkillsDir({ into: join(root, 'bare') }),
       error => error.code === 'SKILL_INSTALL_NO_SKILLS_DIR');
-    // An explicit location is always honoured; the refusal is about guessing, not about strictness.
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// The refusal above is about GUESSING a location. Once someone names one there is nothing left to
+// guess, so any existing directory is obeyed wherever it sits -- inside the project or not.
+test('a named skills directory is obeyed anywhere, provided it exists', () => {
+  const root = scratch();
+  try {
+    mkdirSync(join(root, 'bare'), { recursive: true });
+    mkdirSync(join(root, 'elsewhere'), { recursive: true });
     assert.equal(resolveSkillsDir({ into: join(root, 'bare'), skills_dir: join(root, 'elsewhere') }),
       join(root, 'elsewhere'));
+
+    // A path that does not exist is far more often a typo than an instruction, and creating it
+    // would put the skill somewhere nothing reads while reporting success.
+    assert.throws(() => resolveSkillsDir({ into: join(root, 'bare'), skills_dir: join(root, 'typo') }),
+      error => error.code === 'SKILL_INSTALL_SKILLS_DIR_ABSENT');
+
+    writeFileSync(join(root, 'a-file'), '');
+    assert.throws(() => resolveSkillsDir({ into: join(root, 'bare'), skills_dir: join(root, 'a-file') }),
+      error => error.code === 'SKILL_INSTALL_SKILLS_DIR_NOT_A_DIRECTORY');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('installing into a named directory outside the project works end to end', () => {
+  const root = scratch();
+  try {
+    const into = join(root, 'bare');
+    const skills = join(root, 'custom-skills');
+    mkdirSync(into, { recursive: true });
+    mkdirSync(skills, { recursive: true });
+    const bundle = buildSkillBundle({ out: join(root, 'dist') });
+    const held = installSkillBundle({ bundle: bundle.out, into, skills_dir: skills, repository: process.cwd() });
+    assert.equal(held.path, join(skills, 'ascrybe'));
+    assert.deepEqual(held.verified_entry_points, ['bin/estate-query.mjs', 'bin/estate-cypher.mjs']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
