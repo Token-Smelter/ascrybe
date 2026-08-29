@@ -18,6 +18,7 @@ import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESTATE_QUERY_CONTRACT_VERSION, querySurfaceContract } from '../tools/estate-graph-query.mjs';
+import { installSkillBundle } from '../tools/skill-install.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRY_POINTS = ['tools/estate-graph-query.mjs', 'tools/estate-graph-cypher.mjs'];
@@ -134,9 +135,22 @@ export function verifySkillBundle({ path, contract }) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [command, path] = process.argv.slice(2);
+  const [command, ...rest] = process.argv.slice(2);
+  const flag = name => {
+    const at = rest.indexOf(`--${name}`);
+    return at === -1 ? null : rest[at + 1] ?? null;
+  };
+  const path = rest[0] && !rest[0].startsWith('--') ? rest[0] : null;
   try {
-    if (command === 'verify') {
+    if (command === 'install') {
+      const into = flag('into');
+      if (!into) throw new Error('--into <project> is required');
+      const bundle = flag('bundle') ?? buildSkillBundle().out;
+      const held = installSkillBundle({ bundle, into, skills_dir: flag('skills-dir'), repository: root });
+      console.log(JSON.stringify(held, null, 2));
+      console.log(`INSTALLED ${held.skill} -> ${held.path} (${held.surface_contract}, `
+        + `entry points verified: ${held.verified_entry_points.join(', ')})`);
+    } else if (command === 'verify') {
       const held = verifySkillBundle({ path: resolve(path ?? join(root, 'dist', 'ascrybe-skill')),
         contract: querySurfaceContract() });
       console.log(JSON.stringify(held, null, 2));
@@ -147,7 +161,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         surface_contract: held.surface_contract, contract_digest: held.contract_digest }, null, 2));
     }
   } catch (error) {
-    console.error(`FAIL skill bundle: ${error.message}`);
+    console.error(`FAIL skill ${command ?? 'bundle'}: ${error.message}`);
+    if (error.detail) console.error(JSON.stringify(error.detail, null, 2));
     process.exitCode = 1;
   }
 }
