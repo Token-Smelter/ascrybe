@@ -60,11 +60,20 @@ digest-checked so a client can tell when documentation has drifted from the buil
 ## Giving the graph to an agent
 
 ```bash
-ascrybe skill bundle       # a self-contained, read-only copy of the query surface
+ascrybe skill bundle                      # build a self-contained, read-only copy
+ascrybe skill install --into <project>    # build it and put it where that project reads skills
+ascrybe skill verify <installed-path>     # does an installed copy still match this build?
 ```
 
 The bundle carries the two read CLIs and their instructions, and deliberately carries neither the
 projection, the credentials, nor the runtime config.
+
+`install` refuses more than it does, because hand-copying is what leaves a stale skill behind. It
+will not invent a skills directory in a project that has no convention for one (pass `--skills-dir`
+to say where), will not delete a directory it cannot identify as a previous install of this skill,
+and will not report success until each installed entry point loads from its new home and refuses an
+empty config. It writes `INSTALL.json` recording which Ascrybe commit produced the copy — the
+contract digest can say a bundle describes a different surface, but not which build it came from.
 
 ## Sending a graph to another Ascrybe user
 

@@ -39,8 +39,8 @@ const COMMANDS = {
   dashboard: { script: 'tools/estate-dashboard-server.mjs', config: true, describe: 'serve the graph' },
   package: { script: 'scripts/projection-package-cli.mjs', config: true, heap: 16384,
     verbs: ['pack', 'verify', 'load'], describe: 'send a graph to another Ascrybe user, or load one' },
-  skill: { script: 'scripts/build-skill-bundle.mjs', verbs: ['bundle', 'verify'],
-    describe: 'build the installable read-only skill' },
+  skill: { script: 'scripts/build-skill-bundle.mjs', verbs: ['bundle', 'install', 'verify'],
+    describe: 'build, install, or check the read-only skill' },
   eval: { script: 'tools/eval/cli.mjs', describe: 'run an evaluation' },
 };
 
