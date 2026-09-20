@@ -35,7 +35,7 @@ const state = {
 };
 
 const kindShape = {
-  Claim: 'rounded', Referent: 'circle', Document: 'document', Evidence: 'diamond',
+  Claim: 'rounded', Referent: 'ring', Document: 'document', Evidence: 'diamond',
   CodeFact: 'square', AdjudicationReceipt: 'hexagon', SupersessionReceipt: 'hexagon',
   ObligationResult: 'diamond', SourceCommit: 'double', Project: 'double', Bundle: 'bundle',
 };
@@ -138,6 +138,12 @@ function bindGraphDetail(element, detail) {
   element.addEventListener('blur', () => hideGraphDetail(element));
 }
 
+function claimVerdictMarker(verdict) {
+  if (verdict === 'supported') return '✓';
+  if (verdict === 'refuted') return '×';
+  return '?';
+}
+
 function shapeFor(node) {
   const shape = kindShape[node.kind] || 'circle';
   if (shape === 'rounded') return svgElement('rect', { x: -27, y: -12, width: 54, height: 24, rx: 8, class: 'node-shape' });
@@ -156,6 +162,12 @@ function shapeFor(node) {
   if (shape === 'document') return svgElement('path', { d: 'M-13-15 H7 L14-8 V15 H-13 Z M7-15 V-8 H14', class: 'node-shape' });
   if (shape === 'diamond') return svgElement('path', { d: 'M0-13 L13 0 L0 13 L-13 0 Z', class: 'node-shape' });
   if (shape === 'hexagon') return svgElement('path', { d: 'M-12-7 L0-14 L12-7 L12 7 L0 14 L-12 7 Z', class: 'node-shape' });
+  if (shape === 'ring') {
+    const group = svgElement('g');
+    group.append(svgElement('circle', { r: 12, class: 'node-shape' }),
+      svgElement('circle', { r: 7, class: 'node-shape referent-core' }));
+    return group;
+  }
   if (shape === 'double') {
     const group = svgElement('g');
     group.append(svgElement('circle', { r: 14, class: 'node-shape' }), svgElement('circle', { r: 9, class: 'node-shape' }));
@@ -181,6 +193,7 @@ function render() {
       'data-relation': edge.relation,
       'data-role': role,
       'data-bundle': String(Boolean(edge.bundle)),
+      'data-receipted': String(edge.relation === 'identifies' && Boolean(edge.properties?.resolution_receipt_id)),
       'data-from': edge.from,
       'data-to': edge.to,
       'marker-end': ['superseded_by', 'identifies', 'adjudicated_by'].includes(edge.relation) ? 'url(#arrow)' : '',
@@ -223,6 +236,13 @@ function render() {
       'data-kind': node.kind, 'data-verdict': node.properties?.verdict || '',
     });
     group.append(shapeFor(node));
+    if (node.kind === 'Claim') {
+      const marker = svgElement('text', {
+        x: 0, y: 4, class: 'claim-verdict-marker', 'text-anchor': 'middle', 'aria-hidden': 'true',
+      });
+      marker.textContent = claimVerdictMarker(node.properties?.verdict);
+      group.append(marker);
+    }
     const label = svgElement('text', {
       x: 16, y: 4,
       class: `node-label${labelled.has(node.id) ? '' : ' is-secondary'}`,
@@ -264,7 +284,9 @@ function setConnection(kind, label) {
 
 function updateProjectionStatus(projection) {
   state.projection = projection;
-  document.querySelector('#projection-status').textContent = `${state.view} · ${projection.status}`;
+  const status = document.querySelector('#projection-status');
+  status.dataset.status = projection.status || 'idle';
+  status.textContent = `${state.view} · ${projection.status}`;
   document.querySelector('#coverage-status').textContent = `${projection.processed_nodes}/${projection.total_nodes} nodes · ${projection.processed_edges}/${projection.total_edges} edges`;
   document.querySelector('#source-status').textContent = projection.source_commit || '';
 }
