@@ -54,9 +54,9 @@ const CREATE_TABLE = /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE
 // entity layer (which keys on the table's own name) sees `charges` in both.
 //
 // BOTH real quoting shapes have to survive this, and they nest differently:
-//   `` `sleepworlds.revenue.app_store_connect_sales_raw` ``  — ONE quoted span
+//   `` `orchardlabs.revenue.storefront_sales_raw` ``  — ONE quoted span
 //       holding the dots (BigQuery's usual spelling), and
-//   `sleepworlds_analytics.gold_asset_registry`              — unquoted.
+//   `orchardlabs_analytics.gold_asset_registry`              — unquoted.
 // So the outer quoting is stripped FIRST and the dots are split AFTER; splitting
 // first left the backticked form as a single 47-character "table name".
 const splitQualifiedName = raw => unquote(String(raw).trim())

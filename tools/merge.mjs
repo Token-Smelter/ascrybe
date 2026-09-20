@@ -692,7 +692,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
       // dozens of independent Gradle modules (this repo's own module
       // boundaries are invisible to a single-repo fact model, so every
       // same-named redeclaration looks like one giant ambiguity) — up to
-      // ~160 candidates per import observed against the real sw-android
+      // ~160 candidates per import observed against a large real Android estate
       // source. The status stays 'ambiguous' regardless (never guessed);
       // this caps only how many candidate ids are ENUMERATED in the graph
       // (same SAMPLE_CAP-style bounded-evidence precedent extract.mjs

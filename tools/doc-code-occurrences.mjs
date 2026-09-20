@@ -8,7 +8,7 @@
 // Matching is graded, and every edge names its basis so aggressiveness is disclosed, never
 // smuggled: `exact` is the byte-exact surface; `normalized` folds case and the separator
 // alphabet (kebab/snake/camel/space) on both sides, which is what links human prose
-// ("Sleep Worlds", "media encoder") to identifier surfaces (sleepworlds, MediaEncoder).
+// ("Orchard Labs", "media encoder") to identifier surfaces (orchardlabs, MediaEncoder).
 // Normalized matching is still derivation, not similarity: two tokens match only when one
 // deterministic fold maps both to the same string, and a fold that lands on a short or
 // English-common form is refused by the distinctiveness guard rather than allowed to flood
@@ -26,7 +26,7 @@ const WORD = /[A-Za-z_$][\w$]*/gu;
 const BACKTICK = /`([^`\n]+)`/gu;
 const PATHISH = /[\w$.@-]+(?:\/[\w$.@-]+)+/gu;
 // Multi-word phrases feed the normalized tier as overlapping 2- and 3-grams: a greedy regex
-// would consume "Sleep Worlds is" and never offer "Sleep Worlds", so the n-grams are enumerated
+// would consume "Orchard Labs is" and never offer "Orchard Labs", so the n-grams are enumerated
 // from the line's word sequence instead.
 
 /** Fold case and the separator alphabet so prose and identifier spellings meet. */
