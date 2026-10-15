@@ -371,7 +371,7 @@ export function extractPiResult(stdout) {
     cost: Number(u.cost?.total || 0),
     cost_reported: u.cost?.total != null,
   };
-  // stopReason/errorMessage expose PROVIDER-side failures (e.g. openai-codex
+  // stopReason/errorMessage expose PROVIDER-side failures (e.g. a provider
   // provider_transport_failure -> stopReason 'error' with an empty content[]), which otherwise
   // masquerade as an unparseable answer. Surface them as terminal provider failures for custody.
   return { text, usage, found: true, model: message.model || null, stopReason: message.stopReason || null, errorMessage: message.errorMessage || null };
@@ -472,7 +472,7 @@ export async function callModelOnce({ model, prompt, thinking = null, runner = n
   }
   const parsed = extractPiResult(stdout);
   const json = parseModelJson(parsed.text);
-  // A provider-side stopReason:'error' (e.g. openai-codex WebSocket transport failure) exits 0
+  // A provider-side stopReason:'error' (e.g. a WebSocket transport failure) exits 0
   // but carries no answer; classify it as a terminal provider error rather than 'unparseable'.
   let finalOutcome = outcome;
   if (parsed.stopReason === 'error') finalOutcome = 'error:provider';
@@ -1156,7 +1156,7 @@ run        LEGACY paid campaign, frozen by default. Requires explicit ALLOW_LEGA
            --select all adjudicates EVERY candidate_packet in bounded batches (heartbeat per
            batch, receipts flushed incrementally). Re-running with the same --out RESUMES
            (skips already-receipted packets). Every pi call is timeout-wrapped; concurrency is
-           held to [1,8] live pi processes. Roster flags override the constants; NO anthropic/*.
+           held to [1,8] live pi processes. Roster flags override the constants; no vendor-specific routes.
 reconcile  Fold accepted verdicts onto ACTIVE via the landed reducer and print the conservation law.`);
     process.exit(options.help ? 0 : 1);
   }

@@ -25,7 +25,7 @@ test('research is never adjudicable however it is recognized, and archived mater
 });
 
 test('intent and external records are separated from assertions about the built system', () => {
-  const plan = classifyDocument({ path: 'sw/docs/plans/q3-migration.md', text: '# Q3\n' });
+  const plan = classifyDocument({ path: 'parcel/docs/plans/q3-migration.md', text: '# Q3\n' });
   const ticket = classifyDocument({ path: 'component-b/knowledge-base/tickets/5579.md', text: '# 5579\n' });
   const deepResearch = classifyDocument({ path: 'docs/deep-research-subscription-wellness/notes.md', text: '# Notes\n' });
   assert.deepEqual({
@@ -41,7 +41,7 @@ test('each mode names the frame that could refute it, not merely whether code co
   const frame = (path, text = '') => classifyDocument({ path, text }).adjudication_frame;
   assert.deepEqual({
     spec: frame('docs/architecture/api.md'),
-    plan: frame('sw/docs/plans/q3.md'),
+    plan: frame('parcel/docs/plans/q3.md'),
     // A research finding is refutable — by the world, which this estate does not hold. Saying
     // `false` here would have claimed it was unfalsifiable.
     research: frame('research/findings.md'),
