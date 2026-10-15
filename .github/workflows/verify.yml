@@ -12,7 +12,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # Full history: the design-authority gate compares each document with the commit that last changed it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
