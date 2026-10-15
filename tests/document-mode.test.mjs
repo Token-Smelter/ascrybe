@@ -8,7 +8,7 @@ test('a document declaring its own kind outranks every inference', () => {
 });
 
 test('research is never adjudicable however it is recognized, and archived material never is', () => {
-  const byPath = classifyDocument({ path: 'nes/research/parent-preferences/findings.md', text: '# Notes\n' });
+  const byPath = classifyDocument({ path: 'parcel/research/visitor-preferences/findings.md', text: '# Notes\n' });
   const byStructure = classifyDocument({ path: 'notes/exploration.md', text: '## Hypothesis\nParents prefer shorter stories.\n' });
   const archivedSpec = classifyDocument({ path: 'design/archive/api-contract.md', text: '## Interface\n' });
   assert.deepEqual({

@@ -8,11 +8,11 @@ test('tracked-tree hygiene enumerates the repository instead of the empty index 
   assert.ok(files.includes('README.md'));
 });
 
-test('tracked-tree hygiene applies generated-payload rules', () => {
+test('tracked-tree hygiene refuses private generated payloads even when explicitly added', () => {
   const found = violations(['analysis/current-evidence/result.json'], () => 1);
   assert.deepEqual(found, [{
     path: 'analysis/current-evidence/result.json',
     bytes: 1,
-    rule: 'generated payload under analysis/current-evidence/ must live in ignored custody',
+    rule: 'private records and machine configuration must live in external custody',
   }]);
 });

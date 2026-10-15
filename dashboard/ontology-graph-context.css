@@ -1,0 +1,53 @@
+.ontology-link { color: inherit; font-weight: 600; text-decoration: none; padding: 0.35rem 0.6rem; border: 1px solid currentColor; border-radius: 4px; white-space: nowrap; }
+.ontology-link:hover { text-decoration: underline; }
+.ontology-context { position: absolute; top: 0.75rem; left: 0.75rem; z-index: 30; width: min(22rem, calc(100% - 1.5rem)); max-height: min(60%, 34rem); overflow: auto;
+  background: #fff; color: #111418; border: 1px solid #6b7280; border-radius: 4px; font: 15px/1.45 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; }
+.ontology-context summary { cursor: pointer; padding: 0.6rem 0.8rem; display: grid; gap: 0.1rem; }
+.ontology-context summary strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+.ontology-eyebrow { font-size: 13.5px; color: #3d4450; }
+.ontology-body { padding: 0 0.8rem 0.8rem; display: grid; gap: 0.5rem; }
+.ontology-body p, .ontology-body ul { margin: 0; }
+.ontology-note { color: #3d4450; font-size: 14.5px; }
+.ontology-list { padding-left: 1.1rem; }
+.ontology-list li { margin-bottom: 0.3rem; }
+.ontology-list small { display: block; color: #3d4450; }
+.ontology-anchors { list-style: none; padding: 0; display: grid; gap: 0.3rem; max-height: 13rem; overflow: auto; }
+.ontology-anchors button { width: 100%; text-align: left; padding: 0.4rem 0.55rem; border: 1px solid #6b7280; border-radius: 4px; background: #f3f4f6; color: #111418; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.ontology-anchors button:hover { background: #e6eefc; }
+.ontology-anchors small { display: block; color: #3d4450; font-size: 13.5px; }
+.ontology-more { padding: 0.45rem 0.7rem; border: 1px solid #6b7280; border-radius: 4px; background: #fff; color: #111418; font: inherit; cursor: pointer; }
+.ontology-overlay { font-size: 14.5px; }
+.ontology-back { color: #0a4fc4; font-weight: 600; }
+.ontology-refusal { border-left: 4px solid #6b3f00; background: #fff3d6; color: #4a2c00; padding: 0.4rem 0.6rem; font-size: 14.5px; }
+.ontology-related .ontology-note, .ontology-related .ontology-list small { color: inherit; opacity: 0.8; }
+.ontology-related .ontology-list a { color: inherit; font-weight: 600; text-decoration: underline; }
+.ontology-related .ontology-list { padding-left: 1.1rem; }
+.ontology-related .ontology-refusal { color: #4a2c00; }
+@media (max-width: 640px) { .ontology-context { top: 0.5rem; left: 0.5rem; width: calc(100% - 1rem); max-height: 70%; } }
+
+.ontology-pairs { display: inline-flex; gap: 0.6rem; align-items: baseline; font-size: 14.5px; }
+.ontology-pairs strong { padding: 0.1rem 0.5rem; border: 1px solid currentColor; border-radius: 3px; }
+.ontology-pairs a { color: inherit; }
+
+.lens-switch { display: inline-flex; border: 1px solid currentColor; border-radius: 4px; overflow: hidden; }
+.lens-button { padding: 0.35rem 0.8rem; background: transparent; color: inherit; border: 0; cursor: pointer; font: inherit; }
+.lens-button[aria-pressed="true"] { background: #f1e7c8; color: #1d1a12; font-weight: 700; }
+.link-button { background: none; border: 0; padding: 0 0.25rem; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
+.ontology-related h3 { font-size: 14.5px; margin: 0.8rem 0 0.3rem; }
+.ontology-related li { margin-bottom: 0.45rem; overflow-wrap: anywhere; }
+.ontology-passages { list-style: none; padding: 0; }
+.ontology-quote { margin: 0.2rem 0; padding: 0.15rem 0 0.15rem 0.6rem; border-left: 3px solid currentColor; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ontology-relation-box { margin: 0.35rem 0 0 0.5rem; }
+.source-breadcrumb { position: absolute; top: 0.6rem; left: 0.6rem; z-index: 6; margin: 0; padding: 0.35rem 0.7rem; background: #fff; color: #111418; border: 1px solid #6b7280; border-radius: 4px; font: 15px/1.4 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; }
+.source-breadcrumb button { font: inherit; color: #0a4fc4; background: none; border: 0; text-decoration: underline; cursor: pointer; }
+.node[data-kind^="Ontology"] .node-shape { stroke-dasharray: 5 3; stroke-width: 2; }
+.node[data-kind^="Ontology"] .node-label { font-weight: 600; }
+
+@media (max-width: 900px) { html, body { overflow-x: hidden; } .command-rail { overflow-x: auto; width: 100%; max-width: 100vw; box-sizing: border-box; } .lens-switch, .ontology-link, .ontology-pairs { flex: none; } }
+
+.ontology-bar { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; padding: 0.35rem 0.8rem; min-height: 2.4rem; background: var(--dox-frame-surface, #1d1a12); color: var(--dox-frame-text, #f1e7c8); border-bottom: 1px solid var(--dox-frame-rule, #5b5030); font-size: 14.5px; }
+body.has-ontology-bar .workspace { height: calc(100vh - var(--rail-height) - var(--status-height) - 2.4rem); }
+@media (max-width: 900px) { .ontology-bar { min-height: 2.4rem; overflow-x: auto; flex-wrap: nowrap; } body.has-ontology-bar .workspace { height: calc(100vh - var(--rail-height) - var(--status-height) - 2.4rem); } }
+
+.node[data-kind="OntologyProposal"] .node-shape { stroke: #b06000; stroke-dasharray: 2 3; stroke-width: 2; }
+.node[data-kind="OntologyProposal"] .node-label { font-style: italic; }

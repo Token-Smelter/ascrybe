@@ -1,19 +1,5 @@
 #!/usr/bin/env node
-// Ascrybe connectivity analyzer.
-//
-// Read-only, offline, deterministic diagnostic over an already-generated
-// `estate-graph.json`. It measures how fragmented the canonical graph is and
-// attributes that fragmentation to the language/extractor, node kind, and edge
-// kind that produced it.
-//
-// SAFETY: this tool only reads JSON/JSONL data files with `node:fs`. It never
-// imports, executes, builds, or otherwise evaluates scanned source; it never
-// spawns a process and never touches the network. Every output is derived from
-// the input bytes alone, so two runs over the same input are byte-identical.
-//
-// Why this exists: the estate graph is visibly fragmented, and until now the
-// fragmentation had never been measured. Guessing at fixes without a baseline
-// is how resolution work gets spent on the wrong edge families.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 import fs from './readonly-guard.mjs';
 import path from 'node:path';

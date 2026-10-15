@@ -17,8 +17,6 @@
 //   - createMockModelRunner: a deterministic, ZERO-SPEND runner for tests. Tests inject it so the
 //     ordinary build + the unit-test suite make no real model call.
 //
-// Model strings route through the `a routed gateway` the routed gateway gateway (never `anthropic/*`), matching
-// the prior campaign roster (campaign.mjs PROPOSER_MODEL). anthropic/* is refused fail-closed here.
 import { parseCensusModelJson } from './neural-json.mjs';
 import {
   assertInferencePromptWithinLimit,
@@ -30,12 +28,11 @@ import {
 } from './inference-custody.mjs';
 
 // No default model. A stage's model is configuration, and a constant here would be a silent
-// substitute for a decision nobody made -- the same shape as an unset reasoning level letting a
-// provider choose, which multiplied a corpus run's cost by five. A caller that does not name a
+// substitute for an explicit configuration decision. A caller that does not name a
 // model gets a refusal, not a guess.
 export function requireModel(name, role = 'model') {
   const held = String(name ?? '').trim();
-  if (!held) {
+  if (!held || /[<>]/u.test(held)) {
     const error = new Error(`${role} requires a model name from configuration; there is no default`);
     error.code = 'ASCRYBE_MODEL_UNCONFIGURED';
     throw error;
@@ -64,9 +61,6 @@ export function createPiModelRunner({ model = null, thinking = null, timeoutMs =
   requireModel(model, 'createPiModelRunner');
   const id = String(model || '').trim();
   if (!id) throw new ModelRunnerError('MISSING_MODEL', 'createPiModelRunner requires a model identifier');
-  if (/^anthropic\//.test(id)) {
-    throw new ModelRunnerError('FORBIDDEN_MODEL', `model "${id}" is a forbidden anthropic/* model; route opus via the a routed gateway the routed gateway gateway`, { model: id });
-  }
   let callModelImpl = null;
   const per_call = [];
   return {
@@ -143,9 +137,6 @@ export function createPiRpcRunner({
   const parseAnswer = answerParser || parseCensusModelJson;
   const id = String(model || '').trim();
   if (!id) throw new ModelRunnerError('MISSING_MODEL', 'createPiRpcRunner requires a model identifier');
-  if (/^anthropic\//.test(id)) {
-    throw new ModelRunnerError('FORBIDDEN_MODEL', `model "${id}" is a forbidden anthropic/* model; route opus via the a routed gateway the routed gateway gateway`, { model: id });
-  }
 
   const per_call = [];
   let conn = null;

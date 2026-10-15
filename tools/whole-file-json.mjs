@@ -1,16 +1,4 @@
-// Reading a JSON artifact that has to fit in one string.
-//
-// `JSON.parse` needs a string, and this runtime cannot hold one larger than 536,870,888 bytes.
-// Estate artifacts cross that line as an estate grows, and when they do the failure is a bare
-// RangeError from inside a read with nothing naming the artifact, the limit, or what to do.
-//
-// It has happened twice in this repository already: the model output accumulator capped 24 bytes
-// above the ceiling, and the whole-file claim map at 644,632,920 bytes for a 1,154-document
-// estate. The code graph for that same estate is at 403,750,181 -- three quarters of the way --
-// so the next occurrence is a matter of the estate growing, not of anyone making a mistake.
-//
-// So: refuse past the ceiling with the artifact and the numbers named, and warn while approaching
-// it, because a limit you only learn about by hitting it is a limit nobody could plan around.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 import { readFileSync, statSync } from 'node:fs';
 import { constants } from 'node:buffer';
 

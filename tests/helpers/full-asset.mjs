@@ -6,14 +6,13 @@ import nodeTest from 'node:test';
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
 /**
- * Some suites read materialized assets that are deliberately untracked: `estate/` is a 369 MB copy
+ * Some suites read materialized assets that are deliberately untracked: `estate/` is a large copy
  * of the target estate, and `runs/` holds recorded run outputs. They exist only where a run has
  * produced them, so a Git worktree or a fresh clone legitimately lacks them.
  *
  * Failing in that situation is wrong twice over. It reports a defect where there is only an absent
- * optional input, and — because every code-change Work Order executes in a prepared sibling worktree
- * — it made the project's own deterministic proof battery unpassable at every SHA, which is how two
- * Brews came to fail today for reasons unrelated to their diffs.
+ * optional input, and — because every code-change task executes in a prepared sibling worktree
+ * — it made the project's own deterministic proof battery unpassable at every revision.
  *
  * So the suite skips with a stated reason instead. `scripts/test-fast.mjs` still excludes these
  * files from the fast scope; this makes them honest wherever the full suite is run.

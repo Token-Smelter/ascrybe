@@ -1,0 +1,65 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { sha256, stableStringify } from './lib.mjs';
+
+export const RUNTIME_PROJECT_EXPLORER_SCHEMA = 'estate-map/runtime-project-explorer/v1';
+const canonical = value => stableStringify(value).trim();
+const esc = value => String(value ?? '').replace(/[&<>"']/gu, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[character]);
+
+function explorerModel(receipt, decisionRecords) {
+  const body = {
+    schema: RUNTIME_PROJECT_EXPLORER_SCHEMA,
+    project: receipt.project,
+    provenance: receipt.provenance,
+    scope: receipt.scope,
+    planes: {
+      documentary: receipt.documentary_plane,
+      code: receipt.code_plane,
+    },
+    identity: { ...receipt.identity, full_decision_records: decisionRecords },
+    excluded_relation_like_observations: receipt.excluded_relation_like_observations,
+    limitations: receipt.limitations,
+  };
+  return Object.freeze({ ...body, digest: sha256(canonical(body)) });
+}
+
+const css = `:root{color-scheme:light;--canvas:oklch(.965 .006 248);--ink:oklch(.22 .03 253);--muted:oklch(.48 .025 253);--line:oklch(.82 .018 248);--surface:oklch(.995 .002 248);--doc:oklch(.53 .12 222);--code:oklch(.54 .12 72);--join:oklch(.48 .13 145);--warn:oklch(.52 .13 35);--focus:oklch(.48 .17 275)}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 82% 8%,oklch(.91 .045 222),transparent 32rem),var(--canvas);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,sans-serif}.shell{max-width:92rem;margin:auto;padding:1.25rem 1.5rem 5rem}.mast{display:flex;gap:2rem;justify-content:space-between;align-items:flex-start;padding:2rem 0 1.25rem;border-bottom:1px solid var(--line)}h1{max-width:18ch;margin:.15rem 0;font-size:2.25rem;line-height:1.08;letter-spacing:-.035em;text-wrap:balance}.sha{max-width:34rem;padding:.7rem .85rem;background:var(--ink);color:var(--surface);font:12px/1.45 ui-monospace,monospace;overflow-wrap:anywhere}.mode{margin:.8rem 0 0;color:var(--muted);max-width:70ch}.scope{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--line)}.scope div{min-width:10rem;padding:1rem 1.3rem 1rem 0;margin-right:1.8rem}.scope strong{display:block;font:1.3rem/1.2 ui-monospace,monospace}.scope span{color:var(--muted)}.tabs{display:flex;gap:.35rem;margin:1.5rem 0}.tabs button{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:.65rem .9rem;cursor:pointer}.tabs button[aria-selected=true]{border-color:var(--ink);background:var(--ink);color:var(--surface)}button:focus-visible,summary:focus-visible{outline:3px solid color-mix(in oklch,var(--focus) 45%,transparent);outline-offset:2px}.panel[hidden]{display:none}.panel-head{display:flex;gap:2rem;justify-content:space-between;align-items:end;margin-bottom:1rem}.panel-head h2{margin:0;font-size:1.25rem}.panel-head p{max-width:65ch;margin:0;color:var(--muted)}.ledger{border-top:1px solid var(--line)}details{border-bottom:1px solid var(--line);background:color-mix(in oklch,var(--surface) 75%,transparent)}summary{display:grid;grid-template-columns:minmax(12rem,.55fr) minmax(16rem,1fr) auto;gap:1rem;padding:.8rem;cursor:pointer;align-items:start}summary code,.record code{font:12px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}.badge{justify-self:end;padding:.15rem .45rem;border:1px solid currentColor;color:var(--muted);font-size:.78rem}.record{padding:0 .8rem 1rem;max-width:90ch}.record pre{overflow:auto;padding:.75rem;background:var(--ink);color:var(--surface);font:12px/1.45 ui-monospace,monospace;white-space:pre-wrap}.boundary{padding:1rem;border:1px solid var(--line);background:var(--surface);color:var(--muted)}.outcomes{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}.outcomes span{padding:.45rem .6rem;border:1px solid var(--line);background:var(--surface)}.empty{padding:1.5rem;border:1px dashed var(--line);color:var(--muted)}.relation{color:var(--warn)}.search{display:flex;gap:.75rem;align-items:end;padding:1rem 0 1.25rem}.search label{display:grid;gap:.35rem;min-width:min(32rem,100%);font-weight:650}.search input{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:.72rem .8rem;font:14px/1.35 ui-monospace,monospace}.search input:focus{border-color:var(--focus);outline:3px solid color-mix(in oklch,var(--focus) 25%,transparent)}.search p{margin:0;color:var(--muted)}@media(max-width:720px){.mast,.panel-head{display:block}.sha{margin-top:1rem}summary{grid-template-columns:1fr}.badge{justify-self:start}.scope div{min-width:45%;margin-right:0}.tabs{overflow:auto}}@media(prefers-reduced-motion:no-preference){.tabs button{transition:background-color 180ms cubic-bezier(.22,1,.36,1),color 180ms cubic-bezier(.22,1,.36,1)}}`;
+
+function row(summary, detail, badge, payload) {
+  return `<details><summary><code>${esc(summary)}</code><span>${esc(detail)}</span><span class="badge">${esc(badge)}</span></summary><div class="record"><pre>${esc(JSON.stringify(payload, null, 2))}</pre></div></details>`;
+}
+
+function html(model) {
+  const documentary = model.planes.documentary.rendered_claims.map(claim => row(
+    `${claim.source.path}:${claim.source.start}`,
+    `${claim.predicate} · ${String(claim.object).slice(0, 100)}`,
+    'structural', claim,
+  )).join('');
+  const code = model.planes.code.rendered_facts.map(fact => row(
+    `${fact.record.repo}/${fact.record.file}:${fact.record.line}`,
+    fact.record.kind, 'exact record', fact,
+  )).join('');
+  const identity = model.identity.rendered_outcomes.map(outcome => row(
+    outcome.fact_id, `${outcome.fact_kind} · ${outcome.surface}`, outcome.disposition, outcome,
+  )).join('');
+  const relations = model.excluded_relation_like_observations.rendered.map(observation => row(
+    `${observation.source.path}:${observation.source.line}`,
+    observation.relation_kind, 'excluded from identity', observation,
+  )).join('');
+  const disposition = model.identity.dispositions;
+  const data = JSON.stringify(model).replaceAll('<', '\\u003c');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(model.project.id)} · same-SHA explorer</title><style>${css}</style></head><body><main class="shell"><header class="mast"><div><h1>${esc(model.project.id)} same-SHA explorer</h1><p class="mode"><strong>Structural-only local documentary mode.</strong> Local claims describe syntax and source organization, not product meaning. Optional imported semantic claims are separate and counted explicitly.</p></div><div class="sha">commit ${esc(model.project.sha)}<br>tree ${esc(model.provenance.tree_oid)}<br>documentary ${esc(model.provenance.documentary_plane_head)}<br>code ${esc(model.provenance.code_plane_head)}</div></header><section class="scope" aria-label="Run scope"><div><strong>${model.scope.rendered.documentary_claims}</strong><span>documentary rendered</span></div><div><strong>${model.scope.rendered.code_facts}</strong><span>code facts rendered</span></div><div><strong>${model.scope.evaluated_candidates}</strong><span>identity evaluated</span></div><div><strong>${model.scope.full_census_candidates}</strong><span>full census</span></div><div><strong>${model.scope.pending_candidates}</strong><span>pending / not evaluated</span></div></section><section class="search" aria-label="Full-census entity search"><label for="entity-search">Find exact entity, file, or fact id<input id="entity-search" type="search" autocomplete="off" spellcheck="false" placeholder="selectReferenceFactor"></label><p id="search-count">Rendered ${model.identity.rendered_outcomes.length} of ${model.identity.full_decision_record_count} full-census decisions (cap ${model.scope.render_cap}).</p></section><nav class="tabs" role="tablist" aria-label="Explorer planes"><button role="tab" aria-selected="true" aria-controls="documentary">Documentary plane</button><button role="tab" aria-selected="false" aria-controls="code">Code plane</button><button role="tab" aria-selected="false" aria-controls="identity">Identity outcomes</button><button role="tab" aria-selected="false" aria-controls="relations">Excluded relations</button></nav><section id="documentary" class="panel" role="tabpanel"><div class="panel-head"><h2>Parser-licensed documentary structure</h2><p>${esc(model.planes.documentary.boundary)}</p></div><div class="ledger">${documentary || '<p class="empty">No structural documentary claims were rendered.</p>'}</div></section><section id="code" class="panel" role="tabpanel" hidden><div class="panel-head"><h2>Exact code fact plane</h2><p>Every row descends from the materialized commit tree. Live dirty and untracked files were outside the input universe.</p></div><div class="ledger">${code || '<p class="empty">No code facts were rendered.</p>'}</div></section><section id="identity" class="panel" role="tabpanel" hidden><div class="panel-head"><h2>Identity-only outcomes</h2><p>Complete components are selected only after the full census. Pending means not evaluated; it is not a semantic disposition.</p></div><div class="outcomes"><span>${disposition.joined} joined</span><span>${disposition.unresolved} unresolved</span><span>${disposition.cannot_link} cannot-link</span><span>${disposition.terminal_incomplete} terminal-incomplete</span></div><div class="ledger" id="identity-ledger">${identity || '<p class="empty">No candidate outcomes were rendered.</p>'}</div></section><section id="relations" class="panel" role="tabpanel" hidden><div class="panel-head"><h2 class="relation">Relation-like, never same-entity evidence</h2><p>Command invocation and validator enforcement observations remain inspectable but are excluded from identity admission.</p></div><div class="ledger">${relations || '<p class="empty">No relation-like observations were rendered.</p>'}</div></section><section class="boundary"><strong>Scope boundary.</strong> Rendered ${model.scope.rendered.documentary_claims}/${model.scope.inventory.documentary_claims} documentary claims, ${model.scope.rendered.code_facts}/${model.scope.inventory.code_facts} code facts, ${model.identity.rendered_outcomes.length}/${model.scope.evaluated_candidates} evaluated outcomes, and ${model.excluded_relation_like_observations.rendered.length}/${model.excluded_relation_like_observations.total} excluded relation-like observations. ${esc(model.limitations.join(' '))}</section></main><script type="application/json" id="explorer-data">${data}</script><script>(()=>{const tabs=[...document.querySelectorAll('[role=tab]')];const panels=[...document.querySelectorAll('[role=tabpanel]')];tabs.forEach(tab=>tab.addEventListener('click',()=>{tabs.forEach(item=>item.setAttribute('aria-selected',String(item===tab)));panels.forEach(panel=>{panel.hidden=panel.id!==tab.getAttribute('aria-controls')})}));const model=JSON.parse(document.getElementById('explorer-data').textContent);const input=document.getElementById('entity-search');const ledger=document.getElementById('identity-ledger');const count=document.getElementById('search-count');const escape=value=>String(value??'').replace(/[&<>\"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));const render=records=>{ledger.innerHTML=records.length?records.map(record=>'<details><summary><code>'+escape(record.fact_id)+'</code><span>'+escape(record.fact_kind)+' · '+escape(record.surface)+' · docs '+record.documentary_occurrences.length+' · declarations '+record.code_declarations.length+'</span><span class="badge">'+escape(record.disposition)+'</span></summary><div class="record"><pre>'+escape(JSON.stringify(record,null,2))+'</pre></div></details>').join(''):'<p class="empty">No full-census decision exactly matched that case-sensitive query.</p>';count.textContent='Rendered '+records.length+' of '+model.identity.full_decision_record_count+' full-census decisions'+(input.value?' matching “'+input.value+'”':' (cap '+model.scope.render_cap+')')+'.';};input.addEventListener('input',()=>{const query=input.value;if(!query){render(model.identity.full_decision_records.slice(0,model.scope.render_cap));return;}const matches=model.identity.full_decision_records.filter(record=>record.surface.includes(query)||record.fact_id===query||record.code_declarations.some(row=>row.file.includes(query)||row.fact_id===query)||record.documentary_occurrences.some(row=>row.path.includes(query)));render(matches);const identityTab=tabs.find(tab=>tab.getAttribute('aria-controls')==='identity');identityTab?.click();});})();</script></body></html>`;
+}
+
+export function renderRuntimeProjectExplorer({ receipt, decision_records: decisionRecords, output_dir: outputDir }) {
+  const model = explorerModel(receipt, decisionRecords);
+  const root = resolve(outputDir);
+  mkdirSync(root, { recursive: true });
+  const page = join(root, 'explorer.html');
+  const modelPath = join(root, 'explorer-receipt.json');
+  writeFileSync(page, html(model));
+  writeFileSync(modelPath, `${canonical(model)}\n`);
+  return Object.freeze({ page, receipt: modelPath, digest: model.digest });
+}

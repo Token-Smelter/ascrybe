@@ -6,7 +6,8 @@ inputs.
 
 ```mermaid
 flowchart TD
-  repo[Git repository at a pinned commit] --> extract
+  repo["Git repositories, one per estate member"] --> materialize["materialize<br/>one exact tree each, pinned"]
+  materialize --> extract
   extract[extract<br/>deterministic, free] --> merge[merge]
   merge --> remap[remap<br/>identity resolution]
   claims[semantic claim extraction<br/>model-backed, priced per window] --> project
@@ -18,12 +19,12 @@ flowchart TD
 
 ## What each stage costs
 
-| stage | cost | time on a 1,154-document estate |
-|---|---|---|
-| extract, merge, remap | free, deterministic | ~4 minutes |
-| semantic claim extraction | **priced per window** | hours |
-| project | free | ~9 minutes for 630k nodes |
-| stage and promote | free | included above |
+| Stage | Inference cost | Scaling input |
+| --- | --- | --- |
+| Extract, merge, remap | None; deterministic | Source bytes and facts |
+| Semantic claim extraction | Priced per window | Document windows and configured model |
+| Project | None; deterministic | Claims, facts, and evidence |
+| Stage and promote | No model inference | Projection size and database throughput |
 
 Only one stage costs money. That is why the pipeline is split here rather than run end to end: the
 free half can be re-run freely, and a projection can be rebuilt from an existing claim map without
@@ -34,6 +35,17 @@ paying again.
 A single-repository estate names its commit directly. A multi-repository estate has no single
 commit, so it pins one per repository and the ordered map's digest becomes the estate's identity.
 The two forms are distinguished by which field the artifact carries, never inferred.
+
+`materialize` is what produces that pin map, which is why it is a verb rather than a shell loop.
+It sits before the five stages rather than among them: it builds the estate root the pipeline
+reads, and the manifest it writes carries the `source_identity` every later stage keys on. That
+manifest is checked against its own pins on every read, so a hand-edited commit cannot pass.
+
+It refuses per repository — a member whose tree cannot be reproduced exactly is named and skipped,
+and the estate maps without it. `remap` carries those refusals into the map's provenance, so a map
+built from a partial estate records which members are absent from it rather than leaving that in a
+console log. A **populated estate root**, by contrast, is not a refusal but a hard failure: left in
+the refusals channel it produced a green run whose pin map named less than what was mapped.
 
 This matters more than it sounds. A fact records its path relative to **its own repository**, while
 a document is addressed relative to **the estate**. Those coincide only when the estate is one

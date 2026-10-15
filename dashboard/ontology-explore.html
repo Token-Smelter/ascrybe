@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estate ontology explorer</title>
+  <link rel="stylesheet" href="/ontology-explore.css">
+  <script type="module" src="/ontology-explore.js"></script>
+</head>
+<body>
+  <p class="banner" role="status">Candidate generated from source and not reviewed. Nothing here is accepted, and review recording is not enabled in this viewer.</p>
+  <header class="top">
+    <a class="brand" href="#/">Estate ontology explorer</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#/" data-nav="overview">Overview</a>
+      <a href="#/triage" data-nav="triage">Triage</a>
+      <a href="#/traces" data-nav="traces">Cross-source traces</a>
+    </nav>
+    <form class="search" id="search" role="search">
+      <label for="q" class="sr">Search concepts, domains and components</label>
+      <input id="q" type="search" placeholder="Search concepts, domains, components" autocomplete="off">
+    </form>
+  </header>
+  <main id="main" tabindex="-1" aria-live="polite"><p class="loading">Loading</p></main>
+  <footer id="about" class="about"></footer>
+</body>
+</html>

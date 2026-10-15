@@ -1,44 +1,4 @@
-// F3 — AGGREGATE PERSISTENCE-TARGET FACTS (orientation-test-report.md §7.2 P1).
-//
-// WHY THIS EXISTS. §7.2 F3: "Unblocks Q11: 1 point, but disproportionate
-// importance. 'Where does the authoritative Work Order live' is arguably *the*
-// orientation question in this estate, and the map got it half-right by
-// classification alone while the answer sits at `workOrder.mjs:1`. Extract the
-// storage target of repository/aggregate modules (scoped-storage calls, path
-// joins) as a first-class fact."
-//
-// §5 states the failure harder: "It knows where every *symbol* is and cannot
-// say where the *system's state* is." The pre-F3 map could prove there is no
-// `work_orders` table and could classify `work_order_summary` as a read model,
-// and still could not say that truth lives in `work-orders/<id>/order.json`.
-//
-// GROUNDED IN THE REAL IDIOMS (verified at the base of record, not assumed):
-//   context.storage.write(`work-orders/${wo.id}/order.json`, …)
-//                       plugins/task-orchestration/server/aggregates/workOrder.mjs:338
-//   context.storage.read("work-orders/index.json")
-//                       plugins/task-orchestration/server/aggregates/workOrder.mjs:247
-//   join(home, "plugins", "recipe-engine", "brews.db")
-//                       plugins/recipe-engine/server/index.mjs:6258
-//
-// WHAT IT EXTRACTS.
-//   persistence_target  one per scoped-storage / filesystem call that names a
-//                       path: the operation, the receiver chain, and the path
-//                       as the source writes it (literal, or template with its
-//                       literal segments preserved and its substitutions marked).
-//   path_expression     one per `join(...)` / `resolve(...)` / `path.join(...)`
-//                       call: the ordered segment list, each marked literal or
-//                       expression. This is what makes Q2's default brew-DB path
-//                       readable without evaluating anything.
-//
-// WHAT IT REFUSES, TYPED. A template substitution is NEVER resolved: it is
-// recorded as `{kind:'expression', text:'wo.id'}` inside the segment list and
-// the reconstructed `path_pattern` carries `${…}` verbatim. A path built from a
-// bare identifier is emitted with `path_kind:'expression'` and
-// `refusal:'path_not_statically_readable'` rather than omitted — the call site
-// is still the witness a reader needs, and silence would hide it.
-//
-// READ-ONLY / NO-EXEC: walks a tree-sitter tree over already-redacted text.
-// Resolves no path, touches no filesystem, evaluates nothing.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 const TEXT_CAP = 400;
 const SEGMENT_CAP = 32;
@@ -49,7 +9,7 @@ const cap = (text) => {
 };
 const line = (node) => node.startPosition.row + 1;
 
-// Storage/filesystem operations this estate actually uses for durable state.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 const STORAGE_OPERATIONS = new Set([
   'write', 'read', 'writeFile', 'readFile', 'writeFileSync', 'readFileSync',
   'appendFile', 'appendFileSync', 'mkdir', 'mkdirSync', 'rm', 'rmSync',
@@ -69,7 +29,7 @@ function stringValue(node) {
 /**
  * Describe a path argument WITHOUT evaluating it. A template string becomes an
  * ordered segment list plus a `path_pattern` that keeps `${…}` verbatim, so the
- * shape `work-orders/<id>/order.json` is legible and no id is invented.
+ * shape `parcel-orders/<id>/order.json` is legible and no id is invented.
  */
 function describePath(node) {
   if (!node) return null;
@@ -170,8 +130,8 @@ export function scanPersistence(rootNode, ctx) {
 
 // --- Module-header retention (the other half of Q11's witness) --------------
 //
-// The WorkOrder aggregate states its own root file in LINE 1 of the module:
-// `// WorkOrder aggregate: root file \`work-orders/<id>/order.json\`.` That is a
+// The ParcelOrder aggregate states its own root file in LINE 1 of the module:
+// `// ParcelOrder aggregate: root file \`parcel-orders/<id>/order.json\`.` That is a
 // persistence declaration written as prose, and the report's §5 names it
 // explicitly: "a fact stated in **line 1 of the aggregate module**." A map that
 // reads the call site but not the header answers Q11 with a template pattern and

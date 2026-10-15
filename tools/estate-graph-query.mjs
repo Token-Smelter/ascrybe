@@ -61,10 +61,8 @@ const READ_SPAN_MAX_LINES = 400;
 const READ_SPAN_MAX_BYTES = 64 * 1024;
 // Documents rank ahead of what is written inside them. A document's label IS its path, so a
 // reader searching a path is naming the document; the claims that merely mention it are the
-// answer to a different question. The documentary kinds were absent from this table entirely,
-// which put all 140,458 of them behind every code kind, and the 111,499 claims then filled any
-// limit before a Document could appear -- searching a document's own path returned forty claims
-// and not the document.
+// answer to a different question. Rank documents first so claims cannot consume the
+// result budget before the requested document appears.
 const SEARCH_KIND_PRECEDENCE = Object.freeze([
   'Document', 'DocumentSection', 'Diagram',
   'CodeFact', 'Symbol', 'Module', 'Route', 'Table',
@@ -87,6 +85,39 @@ export const PROVENANCE_RELATIONS = Object.freeze([
 export const PROVENANCE_TARGET_KINDS = Object.freeze([
   'AdjudicationReceipt', 'CodeFact', 'Document', 'Evidence', 'SourceCommit', 'SupersessionReceipt',
 ]);
+// A claim's containers are UPWARD, and that is why containment cannot simply join the list above.
+// The justification walk matches its edges undirected, so admitting `contains` there would descend
+// from a document into every sibling claim and from the commit into the whole estate — the exact
+// unbounded scan the exclusion was written to prevent. Ancestry is therefore its own walk, and its
+// direction is not hardcoded: the relation registry already declares which end of a structural edge
+// is the parent, so `contains` (parent at `from`) and `observed_in` (parent at `to`) are both read
+// correctly without this file holding a second opinion about either.
+const structuralRelationsWithParent = parent => Object.freeze(Object.entries(RELATION_REGISTRY)
+  .filter(([, entry]) => entry.role === 'structural' && entry.parent === parent)
+  .map(([relation]) => relation).sort(codePointOrder));
+export const ANCESTRY_PARENT_FROM_RELATIONS = structuralRelationsWithParent('from');
+export const ANCESTRY_PARENT_TO_RELATIONS = structuralRelationsWithParent('to');
+export const ANCESTRY_RELATIONS = Object.freeze(
+  [...ANCESTRY_PARENT_FROM_RELATIONS, ...ANCESTRY_PARENT_TO_RELATIONS].sort(codePointOrder));
+// What standing a container declares about itself. These are READ from the container at query time
+// rather than copied onto what it contains: a projection is immutable and digest-identified, so
+// materializing standing onto every claim would mint a new generation each time the classifier
+// improved. A container carrying none of them reports `standing: null`, which is the visible form
+// of "nothing has classified this yet" rather than a silent default.
+export const STANDING_PROPERTIES = Object.freeze([
+  'document_mode', 'adjudication_frame', 'document_archived',
+]);
+const ANCESTRY_PARENT_LIMIT = 8;
+// Ancestry is a chain for a claim, but not for everything: a capability is provided by many
+// plugins, so upward is a narrow fan rather than a line. Bounding the frontier keeps the cost
+// depth x frontier x parents, the same shape the justification walk already promises, instead of
+// parents^depth.
+const ANCESTRY_FRONTIER_LIMIT = 8;
+// The estate anchor contains everything, so "contained by the estate" distinguishes nothing — and
+// expanding it is the whole-graph scan this walk exists to avoid.
+// The anchor is REPORTED as the top of the chain and never expanded
+// through, which is the same ambient argument that keeps `contains` out of the justification set.
+export const ANCESTRY_AMBIENT_KINDS = Object.freeze(['Project', 'SourceCommit']);
 const PROVENANCE_FRONTIER_LIMIT = 32;
 const PROVENANCE_NEIGHBOR_LIMIT = 48;
 const TRAVERSAL_DEFAULT_LIMIT = 40;
@@ -178,6 +209,84 @@ function nodeFromRow(row, offset = 0) {
     id: row[offset], kind: row[offset + 1], label: row[offset + 2],
     properties: parseProperties(row[offset + 3]),
   };
+}
+
+/** The standing a container declares, or null where nothing has said what the container is. */
+function standingOf(properties) {
+  const held = {};
+  for (const name of STANDING_PROPERTIES) {
+    if (properties?.[name] != null) held[name] = properties[name];
+  }
+  return Object.keys(held).length ? Object.freeze(held) : null;
+}
+
+/**
+ * Walk from a node to its CONTAINERS and no further.
+ *
+ * Two directed queries per node rather than one undirected one. That is not style: if the match is
+ * undirected the direction test has to be a property comparison, so Neo4j expands the anchor's
+ * whole degree and filters afterwards — from a source commit that is every document, code fact and
+ * declaration it holds. A directed expand per parent end reads only edges that could be container
+ * edges, and ANCESTRY_AMBIENT_KINDS stops the walk before the one node whose degree is the estate.
+ *
+ * Cost is depth x frontier x parents. Each step names its relation, its container, and the standing
+ * that container declares: a reader can disagree with "inherited from doc:x at depth 2 by contains"
+ * and cannot disagree with a number.
+ */
+async function walkAncestry(client, projectionId, nodeId, { depth, parentLimit }) {
+  // The parent end decides which arrow to follow, and the registry decides the parent end. A
+  // relation whose parent is `from` (contains) reaches its container against the arrow; one whose
+  // parent is `to` (member_of, observed_in) reaches it along the arrow.
+  const branches = [
+    { arrow: ['<-', '-'], relations: ANCESTRY_PARENT_FROM_RELATIONS },
+    { arrow: ['-', '->'], relations: ANCESTRY_PARENT_TO_RELATIONS },
+  ].filter(branch => branch.relations.length);
+  const chain = [];
+  const seen = new Set([nodeId]);
+  let cursor = [nodeId];
+  let expandedNodes = 0;
+  let truncated = false;
+  for (let level = 1; level <= depth && cursor.length; level += 1) {
+    const next = [];
+    for (const current of cursor) {
+      expandedNodes += 1;
+      const answers = await Promise.all(branches.map(branch => client.query(`
+        MATCH (n:EstateNode {projection_id: $projection_id, node_id: $node_id})
+          ${branch.arrow[0]}[r:ESTATE_EDGE {projection_id: $projection_id}]${branch.arrow[1]}
+          (other:EstateNode {projection_id: $projection_id})
+        WHERE r.relation IN $relations
+        RETURN r.edge_id, r.relation, startNode(r).node_id, endNode(r).node_id,
+               other.node_id, other.kind, other.label, other.properties_json
+        ORDER BY r.relation, other.node_id
+        LIMIT $limit
+      `, {
+        projection_id: projectionId, node_id: current, relations: branch.relations,
+        // One over the cap, so a full page is distinguishable from an exactly-full one.
+        limit: parentLimit + 1,
+      })));
+      for (const rows of answers) {
+        if (rows.length > parentLimit) truncated = true;
+        for (const row of rows.slice(0, parentLimit)) {
+          const containerId = row[4];
+          if (seen.has(containerId)) continue;
+          seen.add(containerId);
+          const container = nodeFromRow(row, 4);
+          // `from` and `to` are the projected edge's own endpoints, named as every other edge on
+          // this surface names them. That is what lets a downstream filter drop a whole step when
+          // either endpoint is withheld, rather than leaving a step that cites a hidden node.
+          chain.push({
+            depth: level, relation: row[1], edge_id: row[0], from: row[2], to: row[3],
+            container, standing: standingOf(container.properties),
+          });
+          if (ANCESTRY_AMBIENT_KINDS.includes(container.kind)) continue;
+          if (next.length < ANCESTRY_FRONTIER_LIMIT) next.push(containerId);
+          else truncated = true;
+        }
+      }
+    }
+    cursor = next;
+  }
+  return { chain, expandedNodes, truncated };
 }
 
 function structuredNode(row, offset = 0) {
@@ -321,6 +430,28 @@ export class EstateGraphQueries {
     `, { slot: estateSlot(view, this.estate) });
     if (!rows.length) fail('ESTATE_QUERY_PROJECTION_MISSING', `no ${view} projection is available`);
     return projectionSummary(rows[0]);
+  }
+
+  // One page of the nodes of a single kind, in id order. Fixed query: it lets a coverage listing open every admitted node, nothing more.
+  async nodesByKind({ view, kind, limit = 40, offset = 0 } = {}) {
+    const projection = await this.projection(view);
+    const rows = await this.client.query(`
+      MATCH (n:EstateNode {projection_id: $projection_id, kind: $kind})
+      RETURN n.node_id, n.kind, n.label ORDER BY n.node_id SKIP $offset LIMIT $limit
+    `, { projection_id: projection.projection_id, kind: String(kind), offset: Math.min(Math.max(Math.trunc(Number(offset)) || 0, 0), 10_000_000), limit: boundedInteger(limit, 'limit', 40, 100) });
+    return this.result('nodes-by-kind', projection, { nodes: rows.map(([id, k, label]) => ({ id, kind: k, label })) });
+  }
+
+  // Every Document node of one projection with the content identity it was read at. Fixed query, no caller-supplied Cypher; an
+  // ontology binding joins on blob identity and never on names.
+  async documentAnchors({ view } = {}) {
+    const projection = await this.projection(view);
+    const rows = await this.client.query(`
+      MATCH (n:EstateNode {projection_id: $projection_id, kind: 'Document'})
+      RETURN n.node_id, n.properties_json
+    `, { projection_id: projection.projection_id });
+    const documents = rows.map(([nodeId, json]) => { const p = json ? JSON.parse(json) : {}; return { node_id: nodeId, path: p.path ?? null, blob_oid: p.blob_oid ?? null }; });
+    return this.result('document-anchors', projection, { documents });
   }
 
   result(query, projection, data, metadata = {}) {
@@ -684,12 +815,8 @@ export class EstateGraphQueries {
       ORDER BY role_rank, child_rank, plane_rank, other.structural_descendants DESC, r.relation, other.kind, other.label, r.edge_id
       LIMIT $limit
     `, { projection_id: projection.projection_id, node_id: nodeId, roles, limit: bound * 4 + 1 });
-    // One dominant kind must not consume the whole budget. A document with 233 claims and one
-    // section spent all 120 rows on claims; the section survived only because it happened to
-    // outrank them on descendants, and a document whose claims sorted higher would have shown no
-    // structure at all while looking complete. Drawing 119 of 233 identical siblings also says
-    // nothing the counted bundle does not already say better, so the remainder stays folded.
-    // The overview has applied this quota since it was written; the node view had not.
+    // One dominant kind must not consume the whole budget and hide the document structure.
+    // Fold omitted siblings into a counted bundle so a bounded view does not imply completeness.
     // How many of one kind is a judgement, not a constant. The default only guarantees that no
     // kind can crowd out the rest; a caller that wants the mass unfolded raises it.
     const kindQuota = requestedQuota === null
@@ -908,6 +1035,11 @@ export class EstateGraphQueries {
       frontier = nextFrontier;
     }
 
+    // Where the claim was written is not why it is true, so containment never enters the
+    // justification budget above; it is walked separately and reported separately.
+    const ancestry = await walkAncestry(this.client, projection.projection_id, nodeId,
+      { depth: maxDepth, parentLimit: ANCESTRY_PARENT_LIMIT });
+
     const data = targets.slice(0, bound).map(targetId => {
       const pathNodeIds = [targetId];
       const edges = [];
@@ -922,6 +1054,9 @@ export class EstateGraphQueries {
     return this.result('provenance', projection, data, {
       truncated: targets.length > bound || frontierTruncated,
       max_depth: maxDepth,
+      // The containers this node sits inside, nearest first. Standing composes along this chain at
+      // read time; nothing here is written back onto the node it describes.
+      ancestry: ancestry.chain,
       traversal: {
         relations: PROVENANCE_RELATIONS,
         target_kinds: PROVENANCE_TARGET_KINDS,
@@ -929,7 +1064,17 @@ export class EstateGraphQueries {
         frontier_limit: PROVENANCE_FRONTIER_LIMIT,
         neighbor_limit: PROVENANCE_NEIGHBOR_LIMIT,
         excluded_relations: ['contains', 'documented_in'],
-        exclusion_reason: 'structural containment and documentary occurrence are ambient, not justification',
+        exclusion_reason: 'in the justification walk, structural containment and documentary occurrence are ambient, not justification; containment is walked separately and upward only, and is disclosed under `ancestry`',
+        ancestry: {
+          relations: ANCESTRY_RELATIONS,
+          direction: 'containers only; the parent end of each structural relation comes from the relation registry',
+          stops_at_kinds: ANCESTRY_AMBIENT_KINDS,
+          standing_properties: STANDING_PROPERTIES,
+          expanded_nodes: ancestry.expandedNodes,
+          parent_limit: ANCESTRY_PARENT_LIMIT,
+          frontier_limit: ANCESTRY_FRONTIER_LIMIT,
+          truncated: ancestry.truncated,
+        },
       },
     });
   }

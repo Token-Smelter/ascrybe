@@ -1,37 +1,4 @@
-// Read-only invariant for the estate map.
-//
-// WHY THIS EXISTS. Every extractor in this directory reads a SCANNED TREE (the
-// "estate") and writes derived artifacts somewhere. Two tools shipped with an
-// output default INSIDE the tree they scan:
-//
-//   discover-entities.mjs  --out    defaulted to <estate-root>/.estate-map/entity-discovery
-//   loop-driver.mjs        --state  defaulted to <estate-root>/.estate-map/loop
-//
-// That is not hypothetical damage. A `.estate-map/` directory (including a 32 MB
-// map.html and an OPERATION-LOG.md) already existed inside a NEIGHBOURING estate
-// before the 2026-07-26 portability probe started, because an earlier run took the
-// defaults and wrote into a repository this tool had no authority over. A foreign
-// estate is EVIDENCE. Writing into it corrupts the measurement (a later scan reads
-// the earlier scan's leavings) and mutates a tree nobody authorized it to touch.
-//
-// TWO MECHANISMS, DELIBERATELY SEPARATE:
-//
-//   1. defaultOutputRoot() — no output default may land inside a scanned tree.
-//      This removes the FOOT-GUN.
-//   2. assertWritable() / guardedFs — every write in tools/estate-map/** goes
-//      through a proxy that refuses a path under a registered scan root and throws
-//      with code ASCRYBE_READONLY_VIOLATION. This removes the CLASS.
-//
-// (1) alone is not enough: an operator can still pass `--out <estate>/x` by hand,
-// and a future tool can still invent a new estate-relative default. (2) alone is
-// not enough: with no safe default, every invocation needs an explicit flag and
-// the common path stays dangerous. Both are required.
-//
-// NO BYPASS. There is intentionally no `--allow-write-inside-scan-root` escape
-// hatch and no env override that disarms the guard. An escape hatch is what a
-// future run reaches for at 2am to make a red gate green, which is precisely the
-// failure this file exists to make impossible. If output belongs somewhere, that
-// somewhere is outside the tree being measured.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 import fsPromises from 'node:fs/promises';
 import { createWriteStream as nodeCreateWriteStream, realpathSync } from 'node:fs';
 import crypto from 'node:crypto';

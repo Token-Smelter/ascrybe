@@ -58,7 +58,7 @@ test('grounding is a separate record that never rewrites what the document said'
     source, nature,
   });
   const grounding = groundSubject({ assertion_id: held.assertion_id, path: ['from'],
-    resolved_to: 'referent:recipe-engine',
+    resolved_to: 'referent:widget-engine',
     receipt: { producer: 'semantic-reference-linker', basis: 'label_match', confidence: 0.9 } });
   assert.deepEqual({
     binds: grounding.assertion_id === held.assertion_id,
@@ -68,7 +68,7 @@ test('grounding is a separate record that never rewrites what the document said'
     // The assertion is unchanged: a reader still sees the raw identifier and can ignore the join.
     stillVerbatim: held.subject.from.text,
   }, {
-    binds: true, at: ['from'], to: 'referent:recipe-engine',
+    binds: true, at: ['from'], to: 'referent:widget-engine',
     receipted: ['semantic-reference-linker', 'label_match'], stillVerbatim: 'R1',
   });
   assert.throws(() => groundSubject({ assertion_id: held.assertion_id, resolved_to: 'referent:x', receipt: {} }),

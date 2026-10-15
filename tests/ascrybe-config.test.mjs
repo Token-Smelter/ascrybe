@@ -55,6 +55,24 @@ test('runtime config refuses omitted roles, unknown fields, invalid Pi runner na
     'RUNTIME_CONFIG_REPOSITORIES_INVALID']);
 });
 
+test('ontology classification config selects a Pi role and optional pinned SystemOne key reference', () => {
+  const input = fixture();
+  input.ontology_classification = { llm_role: 'documentary_claims', llm_max_input_bytes: 48000,
+    system_one: { model: 'typesafe/jev-1.13', credential_env: 'OPENROUTER_API_KEY' } };
+  const config = validateEstateMapRuntimeConfig(input);
+  assert.deepEqual(config.ontology_classification, input.ontology_classification);
+});
+
+test('unknown ontology role and moving accelerator alias fail closed', () => {
+  const invalidRole = fixture(); invalidRole.ontology_classification = { llm_role: 'missing_role' };
+  const moving = fixture(); moving.ontology_classification = {
+    system_one: { model: '~typesafe/jev-latest', credential_env: 'OPENROUTER_API_KEY' },
+  };
+  assert.deepEqual([invalidRole, moving].map(input => {
+    try { validateEstateMapRuntimeConfig(input); return null; } catch (error) { return error.code; }
+  }), ['RUNTIME_CONFIG_CLASSIFICATION_ROLE_INVALID', 'RUNTIME_CONFIG_CLASSIFICATION_ACCELERATOR_INVALID']);
+});
+
 test('runtime config preserves explicit logical source repository paths', () => {
   const input = fixture();
   input.source_repositories = { 'home-estate': '/srv/home-estate' };
@@ -88,6 +106,20 @@ test('Pi model preflight reports the missing configured role without fallback', 
     spawn: () => ({ status: 0, stdout: 'provider documentary\n', stderr: '' }),
   }), error => error.code === 'PI_MODEL_NOT_AVAILABLE'
     && error.detail.missing[0].role === 'code_claims');
+});
+
+// Nothing validated the shipped example against the closed validator, so a key added to one and
+// not the other would only be found by a new user copying it. It is also the only place a
+// multi-repository estate is DECLARED rather than described: source_repositories is the estate's
+// membership -- what materialize builds and what read-span later resolves bytes through -- and
+// projection.estate is what keeps two estates' heads apart in the one Neo4j they share.
+test('the shipped example config validates and declares a multi-repository estate', () => {
+  const example = validateEstateMapRuntimeConfig(JSON.parse(
+    readFileSync(new URL('../ascrybe.config.example.json', import.meta.url), 'utf8')));
+  assert.deepEqual({
+    repositories: Object.keys(example.source_repositories).length > 1,
+    estate: example.projection.estate,
+  }, { repositories: true, estate: 'example-estate' });
 });
 
 test('every model role pins its reasoning level explicitly', () => {

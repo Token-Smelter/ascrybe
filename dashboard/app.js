@@ -15,8 +15,10 @@ const graphDetailType = document.querySelector('#graph-detail-type');
 const graphDetailTitle = document.querySelector('#graph-detail-title');
 const graphDetailFields = document.querySelector('#graph-detail-fields');
 
+// A host may open the graph on a given projection view (?view=working); anything else keeps the default.
+const requestedView = new URLSearchParams(location.search).get('view');
 const state = {
-  view: 'selected',
+  view: ['selected', 'working'].includes(requestedView) ? requestedView : 'selected',
   nodes: new Map(),
   edges: new Map(),
   positions: new Map(),
@@ -36,6 +38,7 @@ const state = {
 
 const kindShape = {
   Claim: 'rounded', Referent: 'circle', Document: 'document', Evidence: 'diamond',
+  OntologyRoot: 'double', OntologyGroup: 'rounded', OntologyDomain: 'hexagon', OntologyConcept: 'rounded', OntologyCoverage: 'diamond', OntologyProposal: 'hexagon',
   CodeFact: 'square', AdjudicationReceipt: 'hexagon', SupersessionReceipt: 'hexagon',
   ObligationResult: 'diamond', SourceCommit: 'double', Project: 'double', Bundle: 'bundle',
 };
@@ -43,6 +46,9 @@ const kindShape = {
 function api(path, parameters = {}) {
   const url = new URL(path, location.origin);
   url.searchParams.set('view', state.view);
+  // An ontology host sets these; a plain server never does and the request is unchanged.
+  if (state.lens) url.searchParams.set('lens', state.lens);
+  if (state.pair) url.searchParams.set('pair', state.pair);
   for (const [key, value] of Object.entries(parameters)) if (value != null && value !== '') {
     url.searchParams.set(key, value);
   }
@@ -404,6 +410,7 @@ async function selectNode(id, { push = true, focus = true } = {}) {
     const result = await api('/api/node', { id, expand: state.expand, kind_quota: state.kindQuota });
     const bundles = mergeNeighborhood(result.data, { focus });
     renderInspector(result.data.node, result.data.neighbors, bundles);
+    document.dispatchEvent(new CustomEvent('ascrybe:node-selected', { detail: { node: result.data.node, view: state.view } }));
     updateProjectionStatus(result.projection);
     centerOn(id);
     if (push) {
@@ -781,7 +788,23 @@ svg.addEventListener('pointercancel', () => { endNodeDrag(); state.drag = null; 
 renderTrail();
 // Selections are pushed to the URL fragment; honour one on arrival so a node can be deep-linked.
 const arrivalId = location.hash.length > 1 ? decodeURIComponent(location.hash.slice(1)) : null;
-loadOverview().then(() => { if (arrivalId) return selectNode(arrivalId); });
+for (const held of document.querySelectorAll('.projection-button')) held.classList.toggle('is-active', held.dataset.view === state.view);
+// A host that embeds an ontology serves this module; any other server answers 404 and the graph behaves exactly as before.
+const ontology = import('/ontology-graph-context.js').catch(() => null);
+(async () => {
+  const module = await ontology;
+  const info = module ? await module.probe() : null;
+  if (!info) {
+    // No ontology is built for this graph: the raw view is all there is, and it says so rather than passing for a finished experience.
+    document.querySelector('#view-status').textContent = 'Source view \u00b7 ontology not built';
+  } else { state.lens = module.initialLens(Boolean(arrivalId)); state.pair = new URLSearchParams(location.search).get('pair');
+    // The ontology was bound to one projection view; opening on any other would be refused, so the front door opens on that one.
+    if (!requestedView) { state.view = info.view; for (const held of document.querySelectorAll('.projection-button')) held.classList.toggle('is-active', held.dataset.view === state.view); }
+  }
+  await loadOverview();
+  if (info) await module.attach({ state, selectNode, render, fitGraph, renderTrail, loadOverview }, info, arrivalId);
+  else if (arrivalId) await selectNode(arrivalId);
+})();
 
 
 // How many of one kind to draw before the rest stay folded. A fixed quota is a guess about a

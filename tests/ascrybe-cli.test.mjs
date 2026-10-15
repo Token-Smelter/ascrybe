@@ -23,6 +23,8 @@ test('a config-taking verb is given one, and a verb that takes none is not', () 
 
 test('a corpus projection is re-execed with a heap it can finish in', () => {
   assert.deepEqual(plan(['project', '--promote']).execArgv, ['--max-old-space-size=16384']);
+  assert.deepEqual(plan(['claims']).execArgv, ['--max-old-space-size=49152'],
+    'binding reserves heap headroom before dispatch');
   assert.deepEqual(plan(['query']).execArgv, []);
 });
 

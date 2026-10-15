@@ -117,8 +117,8 @@ test('node query returns structural neighbours as rows and annotation as complet
       ['structural', 'provides_capability', 'out', 'Capability', 13],
     ];
     if (statement.includes('ESTATE_EDGE')) return [['edge:one', 'provides_capability', 'plugin:one', 'capability:one',
-      'capability:one', 'Capability', 'brew', '{}', '{}', 'structural', 'entity', 0, 0, 'to']];
-    return [['plugin:one', 'Plugin', 'task-orchestration', '{}', 'entity', 13, 90]];
+      'capability:one', 'Capability', 'batch', '{}', '{}', 'structural', 'entity', 0, 0, 'to']];
+    return [['plugin:one', 'Plugin', 'parcel-example-12', '{}', 'entity', 13, 90]];
   });
   const queries = new EstateGraphQueries({ client, neighbor_limit: 20 });
   const result = await queries.node({ id: 'plugin:one' });
@@ -137,7 +137,7 @@ test('node query returns structural neighbours as rows and annotation as complet
       // draw containment as containment.
       edge: { id: 'edge:one', relation: 'provides_capability', from: 'plugin:one', to: 'capability:one',
         properties: {}, role: 'structural', parent_end: 'to' },
-      node: { id: 'capability:one', kind: 'Capability', label: 'brew', properties: {}, plane: 'entity',
+      node: { id: 'capability:one', kind: 'Capability', label: 'batch', properties: {}, plane: 'entity',
         structural_children: 0, structural_descendants: 0,
         next_queries: [{ command: 'neighbors', arguments: { id: 'capability:one', direction: 'both' } }] },
     },
@@ -223,6 +223,47 @@ test('provenance walks bounded justification steps and discloses excluded ambien
     variableLength: false,
     relationFiltered: true,
     excluded: ['contains', 'documented_in'],
+  });
+});
+
+test('provenance reports the containers above a claim and stops at the ambient estate anchor', async () => {
+  const expanded = [];
+  const client = clientWith(async (statement, parameters) => {
+    if (statement.includes('EstateProjectionHead')) return [projectionRow];
+    if (statement.includes('RETURN n.node_id') && !statement.includes('ESTATE_EDGE')) {
+      return [['estate-claim:one']];
+    }
+    // Ancestry puts its `other` node on its own indented line; the justification walk keeps it
+    // inline. Only the container branch is fed: a walk that also descended would need the other
+    // arrow and would find nothing here rather than quietly returning the claim's siblings.
+    if (!statement.includes('\n          (other:EstateNode')) return [];
+    if (!statement.includes('<-[r:ESTATE_EDGE')) return [];
+    expanded.push(parameters.node_id);
+    if (parameters.node_id === 'estate-claim:one') {
+      return [['edge:contains-claim', 'contains', 'doc:handbook/retention.md', 'estate-claim:one',
+        'doc:handbook/retention.md', 'Document', 'handbook/retention.md',
+        '{"path":"handbook/retention.md","document_mode":"decision","adjudication_frame":"code_and_supersession"}']];
+    }
+    if (parameters.node_id === 'doc:handbook/retention.md') {
+      return [['edge:contains-doc', 'contains', 'source-commit:fixture', 'doc:handbook/retention.md',
+        'source-commit:fixture', 'SourceCommit', 'fixture', '{}']];
+    }
+    return [];
+  });
+  const result = await new EstateGraphQueries({ client }).provenance({ id: 'estate-claim:one' });
+  assert.deepEqual({
+    chain: result.ancestry.map(step => [step.depth, step.relation, step.from, step.to,
+      step.container.id, step.standing]),
+    // The commit is reported and never expanded through: it contains the whole estate.
+    expanded,
+  }, {
+    chain: [
+      [1, 'contains', 'doc:handbook/retention.md', 'estate-claim:one', 'doc:handbook/retention.md',
+        { document_mode: 'decision', adjudication_frame: 'code_and_supersession' }],
+      // Nothing has classified the commit, and the chain says so rather than defaulting.
+      [2, 'contains', 'source-commit:fixture', 'doc:handbook/retention.md', 'source-commit:fixture', null],
+    ],
+    expanded: ['estate-claim:one', 'doc:handbook/retention.md'],
   });
 });
 

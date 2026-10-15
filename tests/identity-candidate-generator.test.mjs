@@ -208,7 +208,7 @@ test('exact-basis singletons retain an explicit disposition', () => {
 function select(groups, selection) {
   return selectIdentityCandidateBatch({
     groups, selection,
-    source_head: '90ec8527ca8fa5957dc52e91d25414ff5980e1fd',
+    source_head: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     code_plane_head: 'code-plane:fixture',
     census_digest: 'census:fixture',
   });

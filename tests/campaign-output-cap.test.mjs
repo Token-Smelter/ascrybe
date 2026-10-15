@@ -3,13 +3,6 @@ import assert from 'node:assert/strict';
 import { constants } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 
-// The cap that killed an 8,762-window run at window 27.
-//
-// `max_event_bytes` was configured at 536,870,912 and this runtime cannot hold a string longer
-// than 536,870,888 -- twenty-four bytes fewer. The accumulator raced the two limits, so whether a
-// runaway stream was recorded as `output_limit` or threw RangeError and killed the batch came
-// down to where a chunk boundary happened to land. A bound above the capacity of the type holding
-// it is not a bound.
 const source = readFileSync(new URL('../tools/campaign.mjs', import.meta.url), 'utf8');
 
 test('what the accumulator retains is clamped to what a string can hold', () => {

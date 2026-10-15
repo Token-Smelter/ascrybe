@@ -47,12 +47,19 @@ function unresolvedSpecifier(error) {
 
 const extractors = [];
 export const extractorExclusionReceipts = [];
+// One resolved absolute module file path per successfully-loaded extractor kind, keyed by
+// `kind` (not by the internal `extractor` label above, which is a registry-only identifier).
+// tools/file-extraction-adapter.mjs uses this to compute each extractor's TRANSITIVE local
+// dependency closure (its own file plus everything it imports, plus tree-sitter query bytes) for
+// implementation_digest — Function.toString() on just `scan` cannot see any of that.
+export const extractorModuleFiles = {};
 const available = [];
 for (const [extractor, specifier, allowedMissing] of definitions) {
   try {
     const loaded = await import(specifier);
     extractors.push(loaded.default);
     available.push({ extractor, specifier, kind: loaded.default.kind });
+    extractorModuleFiles[loaded.default.kind] = fileURLToPath(new URL(specifier, import.meta.url));
   } catch (error) {
     if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
     const unresolved_specifier = unresolvedSpecifier(error);
@@ -75,6 +82,7 @@ for (const [extractor, specifier, allowedMissing] of definitions) {
   }
 }
 Object.freeze(extractorExclusionReceipts);
+Object.freeze(extractorModuleFiles);
 
 export const extractorAvailabilityReceipt = Object.freeze({
   schema: 'estate-map/extractor-availability/v1',
@@ -96,10 +104,6 @@ const extensionDecisions = [
   ['.cs', 'base text extension retained; sqlite-ddl scans embedded DDL'],
   ['.yaml', 'envelopes and capabilities scan plugin manifests'],
   ['.yml', 'envelopes and capabilities scan plugin manifests'],
-  // Markdown was never admitted to the scan, so the diagram and document-structure extractors
-  // matched files the walk never offered them: a corpus of 615 mermaid-bearing documents and
-  // 31,626 headings produced exactly zero facts in the pipeline while producing them correctly
-  // when called directly. Admitting the extension is what makes a documentary producer reachable.
   ['.md', 'diagrams and document-structure read documentary assertions and the author\'s outline'],
   ['.mdx', 'diagrams and document-structure read documentary assertions and the author\'s outline'],
 ];
@@ -114,35 +118,5 @@ export const textExtensionRegistrationReceipt = Object.freeze({
   files_scanned_denominator_effect: 'every admitted readable matching file is included in each repository files_scanned count',
 });
 
-// `sqliteDdl` reads the DDL that this estate embeds in `.mjs` template literals,
-// which `sql` (filePattern /\.sql$/) structurally cannot see. Its facts create NO
-// graph nodes in merge.mjs by design — they are schema EVIDENCE consumed by
-// entity-layer.mjs, so registering it cannot perturb the node population or any
-// of the five diagnostic queues. Proven by the A/B in
-// examples/entity-layer-report-2026-07-26.md §5.
-// `capabilities` reads the OTHER inter-plugin coupling mechanism this estate
-// uses (the capability registry), which the import graph and the envelope bus
-// both miss. It needs no new text extension: it reads the same `.mjs`/`.ts`
-// sources and the same `plugin.yaml` manifests `envelopes` already admits.
-// Its facts DO mint graph nodes (one per capability type) and edges, so the
-// A/B in examples/range-extension-report-2026-07-26.md attributes the
-// resulting `undomained` growth exactly, as the route work did.
-// COVERAGE-CLOSURE EXTRACTORS (orientation-test-report.md §7.2). Three of the
-// seven features register their own extractor here; the other four ride the
-// existing tree-sitter JS parse (F1/F1b literal values + throw sites, F3
-// persistence targets, F6 tool registrations — see treesitter-js.mjs) or amend
-// an existing producer (F7 witnesses derived route values in http.mjs).
-//
-// NONE of these fact kinds mints a graph node in merge.mjs, by the same design
-// `sqliteDdl` already follows: they are EVIDENCE read by the query surface, not
-// new subjects. That is what keeps the conservation gates
-// (tools/estate-map/conservation.mjs, invoked from merge.mjs) passing —
-// a subject minted without its witnessed incidence would fail the build, and
-// the correct response to that would be to fix the extractor, never the gate.
-//   sqlDml                F5: INSERT/UPDATE column lists + ALTER/CREATE INDEX.
-//   yamlCatalog           F2: every YAML file's records — the potions,
-//                         work-types and checks catalogs the map had zero
-//                         records for.
-//   manifestCompleteness  F4: plugin.yaml key presence (present_nonempty /
-//                         present_empty / absent) + comment retention.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 export default extractors;

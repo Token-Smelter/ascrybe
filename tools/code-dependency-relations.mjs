@@ -39,7 +39,7 @@ const NODE_KIND_TO_FACT_KIND = Object.freeze({
 });
 
 // A merge node lists every site that witnessed it, in producer order, and the first of those is
-// often a usage rather than the declaration: `capability:brew` witnesses a `requires_capability`
+// often a usage rather than the declaration: `capability:batch` witnesses a `requires_capability`
 // line before the manifest that provides it. Anchoring on the first witness would therefore bind a
 // domain entity to a site that merely mentions it. Every witness is considered instead, and the
 // anchor is accepted only when the matching candidates agree on one identity basis — which is the

@@ -176,20 +176,6 @@ function structuralMembership(graph){
 }
 const structureDescriptor=(item,presentation)=>({key:`structure:${item.group}`,label:selected(presentation,`structure:${item.group}`),kind:'structure_aggregate',attribution:item.classified?`derived structure · ${item.rule} · NOT a documented domain`:`unclassified · ${item.reason} · no structural rule applied`});
 
-// THE ENTITY LAYER, read off graph.entity_layer.
-//
-// WHY THIS IS NOT A PARTITION OF graph.nodes. Every other grouping answers "which bucket does
-// this FILE belong to", so its aggregates sum to the node count. The entity layer answers a
-// different question — "what is this system ABOUT" — and its subjects are entities the schema
-// declares, not files the walker found. Forcing it into a partition would require inventing a
-// bucket for the ~2,000 nodes that witness no entity, which is exactly the 1,746-member blob
-// the structural layer was built to remove. Instead the ER view draws ONLY the entities, and
-// the file substrate stays reachable through every other grouping and through drill-in: an
-// entity's members are the modules that witness it, so opening one lands in the evidence.
-//
-// Membership is keyed on (repo, file) because merge.mjs sets a module node's `name` to its
-// repo-relative file path, which is the same string the entity layer's witnesses carry. No id
-// slugging is reimplemented here; a mismatch would silently empty every entity.
 function entityLayerView(graph){
   const records=graph.entity_layer||[];
   const entities=records.filter(record=>record.record_kind==='entity_type');
@@ -257,21 +243,7 @@ function entityAggregates(entityView,presentation){
     nodeToGroup:new Map(entityView.entities.flatMap(item=>item.memberIds.map(id=>[id,`entity:${item.entity}`])))};
 }
 
-// THE INTERPRETATION LAYER, read off graph.interpretation_layer.
-//
-// WHY IT IS DRAWN SEPARATELY AND CAN NEVER BE MISTAKEN FOR AN EXTRACTED FACT. Every other
-// aggregate in this file groups nodes the walker FOUND, each witnessed at a real {repo,file,line}.
-// An interpretation concept is a model's claim ABOUT A SET, evidenced only by a reproducible slice
-// witness (the projection spec + the exact members + the graph digest). That is a strictly weaker
-// evidentiary class, so the view keeps it strictly separate:
-//   * its own aggregate kind `interpretation_aggregate` (render.mjs gives it a dotted rose hexagon
-//     and its own legend row, distinct from the amber entity and violet structure families);
-//   * an `interpretation · ` label prefix, the same trick that stops `client-ui` reading as a
-//     bounded context;
-//   * an `attribution` that names the evidence class and says NOT extracted in words;
-//   * `evidenceClass` on the node data, so a consumer can filter the two classes apart with one key.
-// Members are drilled the same way an entity's are, so opening a concept lands the reader in the
-// real witnessed evidence the interpretation was made over.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 function interpretationLayerView(graph){
   const records=graph.interpretation_layer||[];
   const byId=new Map((graph.nodes||[]).map(node=>[node.id,node]));
@@ -320,35 +292,7 @@ function interpretationAggregates(view,presentation){
     nodeToGroup:new Map(view.concepts.flatMap(item=>item.memberIds.map(id=>[id,item.id])))};
 }
 
-// THE EVENT-FLOW LAYER, read off the graph's REAL `emits` / `consumes` edges.
-//
-// WHY THIS EXISTS. The extractors already resolve the envelope bus completely: on this estate
-// 232 `envelope_kind` nodes carry 761 `emits` and 1,001 `consumes` edges and NOT ONE kind node
-// is isolated. The failure was never extraction — it was that no VIEW made producer -> kind ->
-// consumer navigable. Every other grouping either hides the kinds inside a file bucket
-// (`repository`, `landing`, `structure`), collapses them into one label (`kind`), or attaches
-// them to something else entirely (`entity`). A reader asking "who emits work_order.reported,
-// and who is listening?" had to read the raw edge list.
-//
-// WHY IT IS TRIPARTITE AND NOT A BLOB. Both `emits` and `consumes` point AT the kind, so
-// drawing them as they are stored makes the kind a sink and loses direction entirely. The
-// consume edge is therefore drawn REVERSED here — kind -> consumer — so the flow reads left to
-// right and one glance separates "who sends this" from "who receives it". Nothing about the
-// canonical edge changes: the reversal is a VIEW fact, the bundled edge keeps the canonical
-// edge ids and witnesses, and `direction` says which way the stored edge really points.
-//
-// WHY THE PARTICIPANT IS THE COMPONENT. A site is a module (or the component itself, for a
-// plugin manifest). 232 kinds against 1,682 module nodes is a hairball nobody can read, so the
-// drawn participant is the component and the SITES ARE ITS MEMBERS — opening one drills
-// straight into the witnessed module nodes through the same machinery every other aggregate
-// uses. Nothing is summarised away: every site id is carried on the participant.
-//
-// WHY ASYMMETRIES ARE FIRST-CLASS. `merge.mjs` already stamps `orphan:
-// 'emitted_never_consumed' | 'consumed_never_emitted' | 'isolated'` on the kind node. That
-// stamp IS the defect class this layer exists to find — a kind everybody sends and nobody
-// reads, or one a subscriber waits on that nothing in the estate ever sends — so it is carried
-// onto the drawn node, counted in the view's own stats, and given its own node kind
-// (`event_asymmetry_aggregate`) so the renderer can style it apart from a healthy kind.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 function eventFlowView(graph){
   const byId=new Map((graph.nodes||[]).map(node=>[node.id,node]));
   const kindNodes=(graph.nodes||[]).filter(node=>node.kind==='envelope_kind').sort((a,b)=>a.id.localeCompare(b.id));
@@ -535,21 +479,7 @@ function boundProjection(nodes,edges,recipe){
   const seedSet=new Set(recipe.seeds.filter(id=>byId.has(id))),frontierReserve=recipe.hops>0&&seedSet.size>1?Math.floor(recipe.bounds.maxNodes/4):0,seedCap=Math.max(1,recipe.bounds.maxNodes-frontierReserve);
   for(const id of recipe.seeds){if(ids.size>=seedCap)break;add(id);}
   if(frontierReserve){let taken=0;for(const node of ranked){if(taken>=frontierReserve||ids.size>=recipe.bounds.maxNodes)break;if(seedSet.has(node.id)||ids.has(node.id))continue;const before=ids.size;add(node.id);if(ids.size>before)taken++;}}
-  // PRIORITY NODES, ON A RESERVE — never on the whole budget.
-  //
-  // A view whose PURPOSE is to surface a defect class must not let a generic degree ranking
-  // evict that class: an emitted-never-consumed envelope kind has degree 1 BY DEFINITION —
-  // that is what makes it the defect — so it sorts last precisely because it is the thing
-  // worth seeing, and on the real estate 75 of them fell outside the node bound while
-  // high-traffic healthy kinds filled it.
-  //
-  // The reserve is HALF the node budget, and the cap is the whole point. An unbounded priority
-  // pass is worse than none: this estate carries 81 asymmetric kinds against an 80-node bound,
-  // so admitting them all drew a canvas of 80 defect diamonds with NO producer and NO consumer
-  // beside them — the tripartite view collapsed into exactly the blob it exists to replace.
-  // Half the budget guarantees the defect class is represented AND that the components and
-  // healthy kinds it must be read against are still on screen; the remainder is reported
-  // through `omitted`, never silently dropped.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const priorityReserve=Math.floor(recipe.bounds.maxNodes/2);
   let priorityTaken=0;
   for(const node of ranked){

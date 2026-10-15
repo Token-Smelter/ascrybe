@@ -8,7 +8,6 @@
 
 ---
 
-![Ascrybe's dashboard showing a document's sections alongside the exact fact each was read from](docs/images/dashboard.png)
 
 *Ascrybe mapping its own repository: a document, the sections inside it, and the exact
 extracted fact behind the selected one — its file, its line, and the frame in which it could be
@@ -81,6 +80,8 @@ surface draws: `ascrybe <verb>` acts on an estate, `npm run <script>` acts on As
 | [architecture](docs/architecture.md) | the five stages, what each costs, generations and promotion |
 | [query surface](docs/query-surface.md) | both read boundaries, bounded views, the contract |
 | [operating](docs/operating.md) | configuration, staging, promotion, cost control |
+| [multi-repository documentary campaigns](docs/multi-repository-documentary-campaigns.md) | selected contract for one pinned estate-wide paid documentary campaign |
+| [delta-updatable estate maps](docs/delta-updatable-estate-maps.md) | immutable delta/full-equivalent updates, extractor evolution, and safe publication |
 | [evaluation](docs/evaluation.md) | the harness, and what it does **not** measure |
 | [verification](docs/verification.md) | the gates, and why a check that never ran is the worst kind |
 | [before a PR](docs/before-a-pr.md) | proving a fix with a number the bug could not produce |

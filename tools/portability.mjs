@@ -1,34 +1,4 @@
-// Typed portability records: what an extractor could NOT do on THIS estate, and why.
-//
-// WHY THIS EXISTS. Every reading layer in this directory was written against
-// the home estate, and several of them require an artifact only the home estate
-// has: `design/canon/ontology.md`, `design/canon/ddd-mapping.md`,
-// `plugins/<p>/plugin.yaml`, `client/src/lib/workExplorerGraphModel.ts`. On any other
-// estate those inputs are ABSENT. Absence is a legitimate, reportable state of the
-// world. It must never be an unhandled ENOENT that aborts a pass — on the
-// 2026-07-26 probe a missing MARKDOWN FILE took down loop-driver's entire iteration
-// AFTER extract, merge, structural-grouping and analyze-connectivity had already
-// succeeded, and their output was discarded.
-//
-// NOT A PARALLEL MECHANISM. These records are the conservation gates' derivability
-// vocabulary (conservation.mjs) applied to a second subject. conservation.mjs asks
-// "was extracted evidence represented in the graph?"; this asks "was the evidence
-// this layer needs present on this estate at all?". Same record_type triad, same
-// classification strings, same `examined` discipline — so one consumer reads both
-// and nothing has to learn a second refusal shape.
-//
-//   REFUSAL  the input EXISTS but cannot support the claim   (evidence_lacks_required_membership)
-//   SCOPE    the input was not examined — absent, or the      (relevant_evidence_not_examined)
-//            attempt to examine it failed
-//   BUG      the input exists and supports the claim, and     (evidence_exists_edge_omitted)
-//            the layer still failed to emit
-//
-// AN EXCEPTION IS NOT A REFUSAL. `runGuarded` catches, but it never swallows: an
-// unexpected throw becomes a SCOPE record with failure_mode `unexpected_exception`
-// carrying the error code, message and top stack frame, and callers are expected to
-// surface it. A silent catch would convert "this tool is broken on this estate" into
-// "this estate has nothing to say", which is the exact over-claim the refusal
-// machinery exists to prevent.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 import path from 'node:path';
 import fs from './readonly-guard.mjs';
 import { DERIVABILITY_CLASSIFICATIONS } from './conservation.mjs';
@@ -146,10 +116,7 @@ export async function readOptionalEstateInput(absolutePath, { tool, estateRoot, 
   try {
     return { present: true, value: parse(raw), record: null };
   } catch (error) {
-    // A MALFORMED input is categorically different from an absent one and must not
-    // be smoothed into "this estate has no canon". Absence is a property of the
-    // estate; malformation is a defect in the input or the parser, and silently
-    // treating it as absence manufactures false "undocumented" findings.
+    // Preserve source witnesses; do not infer authority from naming conventions alone.
     return {
       present: false,
       value: null,

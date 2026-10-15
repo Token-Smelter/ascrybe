@@ -191,9 +191,7 @@ export function buildPackets({ graph, discovery, symbolRepos = null, absentPermi
   return packets;
 }
 
-// ---------------------------------------------------------------------------
-// WP3 PREPARE / INGEST — progressive-map-generation §9.3. These operations only
-// materialize and validate durable inputs; no branch in either operation invokes a model.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 export const PREPARED_PACKETS_FILE = 'candidate-packets.jsonl';
 export const INGESTED_RECEIPTS_FILE = 'ingested-receipts.jsonl';
 
@@ -683,7 +681,7 @@ export const DRIFT_NOTES = Object.freeze([
   Object.freeze({
     id: 'DRIFT-3',
     spec: '§3.1 offers disambiguation only `resolved_to` / `irreducible` / `insufficient_evidence`.',
-    source: 'A real entry (ambiguous_c `/gateway/template-events`) has BOTH candidates refuted by discriminating witnesses — the candidate SET is wrong, which is an extractor defect, not an irreducible ambiguity.',
+    source: 'If discriminating witnesses refute every proposed candidate, the candidate set is defective rather than irreducibly ambiguous.',
     resolution: 'Recorded as `insufficient_evidence` with a concrete repair ask, because `irreducible` would drain a queue entry whose real answer is "fix the resolver" — the §1 laundering shape. The spec needs a `candidate_set_refuted` verdict routing to REPAIR, mirroring entity_classification\'s `extraction_artifact`.',
   }),
 ]);

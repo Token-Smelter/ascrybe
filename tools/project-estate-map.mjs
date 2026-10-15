@@ -14,12 +14,7 @@ import {
   loadEstateMapRuntimeConfig, neo4jConnectionFromConfig,
 } from './ascrybe-config.mjs';
 
-/**
- * A whole claim map is read into one string, and a real one does not fit in one. The map for a
- * 1,154-document estate is 644,632,920 bytes against a 536,870,888-byte ceiling, so this path
- * fails with an opaque RangeError roughly a hundred megabytes past the limit and says nothing
- * about the sharded reader that streams instead. Refuse with directions rather than crash.
- */
+/** Resolve only witnessed evidence; unresolved candidates remain explicit. */
 export function readWholeClaimMap(path) {
   const bytes = statSync(path).size;
   if (bytes >= bufferConstants.MAX_STRING_LENGTH) {

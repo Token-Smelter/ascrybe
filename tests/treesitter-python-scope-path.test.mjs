@@ -11,9 +11,6 @@ function scan(source) {
   return extractor.scan(source.split(/\r?\n/u), ctx).filter(fact => fact.kind === 'symbol');
 }
 
-// Without scope_path every Python symbol is refused as `declaration_scope_not_nameable`, which is
-// how a 4,772-module Python estate produced a code plane of 140 symbols. The identity generator is
-// the thing that has to accept them, so the test drives it rather than asserting on the field.
 test('module-level Python declarations become identity candidates', () => {
   const symbols = scan([
     'import os',

@@ -4,26 +4,26 @@ import {
   identityCandidateDecision, identityCandidateDecisions,
 } from '../tools/identity-candidate-generator.mjs';
 
-const capability = (direction, capability_type, owner = 'controller-host', line = 20) => ({
-  kind: 'capability_flow', repo: 'app', file: 'plugins/controller-host/plugin.yaml', line,
+const capability = (direction, capability_type, owner = 'parcel-example-16', line = 20) => ({
+  kind: 'capability_flow', repo: 'app', file: 'plugins/parcel-example-16/plugin.yaml', line,
   capability_type, direction, owner, source: 'manifest',
 });
 const envelope = (idiom, envelope_kind, line = 18) => ({
-  kind: 'envelope_flow', repo: 'app', file: 'plugins/episodic-memory/plugin.yaml', line,
+  kind: 'envelope_flow', repo: 'app', file: 'plugins/parcel-example-4/plugin.yaml', line,
   envelope_kind, direction: 'emit', idiom,
 });
 const document = (file, fields) => ({ kind: 'yaml_document', repo: 'app', file, line: 1, ...fields });
 
 test('a declared capability becomes an entity while requiring or calling one stays a reference', () => {
   assert.deepEqual([
-    identityCandidateDecision(capability('provide', 'work_order_management')),
-    identityCandidateDecision(capability('require', 'brew')),
-    identityCandidateDecision(capability('call', 'brew')),
+    identityCandidateDecision(capability('provide', 'parcel_order_management')),
+    identityCandidateDecision(capability('require', 'batch')),
+    identityCandidateDecision(capability('call', 'batch')),
     identityCandidateDecision(capability('provide', '')),
   ].map(decision => decision.disposition === 'supported'
     ? { surface: decision.surface, namespace: decision.candidate_basis.namespace_key }
     : decision.reason), [
-    { surface: 'work_order_management', namespace: '[\n  "app",\n  "capability"\n]' },
+    { surface: 'parcel_order_management', namespace: '[\n  "app",\n  "capability"\n]' },
     'capability_reference_not_declaration',
     'capability_reference_not_declaration',
     'capability_declaration_incomplete',
@@ -40,8 +40,8 @@ test('a manifest-published envelope kind becomes an entity while code-site traff
 
 test('plugin manifests and typed documents retain declared identity while untyped YAML uses exact file identity', () => {
   assert.deepEqual([
-    document('plugins/recipe-engine/plugin.yaml', { doc_name: 'recipe-engine', api_version: 1 }),
-    document('.catalog/potions/factory-investigation.yaml',
+    document('plugins/parcel-example-2/plugin.yaml', { doc_name: 'parcel-example-2', api_version: 1 }),
+    document('.catalog/recipes/factory-investigation.yaml',
       { api_version: 'example.recipe/v1', doc_id: 'factory/investigation' }),
     document('design/features/thing/DESIGN.md.yaml', { api_version: null, doc_id: null }),
     document('config/settings.yaml', { api_version: 2, doc_id: 'ambiguous' }),
@@ -52,8 +52,8 @@ test('plugin manifests and typed documents retain declared identity while untype
       ? { surface: decision.surface, basis: decision.candidate_basis }
       : decision.reason;
   }), [
-    { surface: 'recipe-engine', basis: { kind: 'declared_namespace_identity',
-      namespace_key: '[\n  "app",\n  "plugin"\n]', declared_identifier: 'recipe-engine' } },
+    { surface: 'parcel-example-2', basis: { kind: 'declared_namespace_identity',
+      namespace_key: '[\n  "app",\n  "plugin"\n]', declared_identifier: 'parcel-example-2' } },
     { surface: 'factory/investigation', basis: { kind: 'declared_namespace_identity',
       namespace_key: '[\n  "app",\n  "example.recipe/v1"\n]', declared_identifier: 'factory/investigation' } },
     { surface: 'design/features/thing/DESIGN.md.yaml', basis: { kind: 'declared_namespace_identity',
@@ -65,17 +65,17 @@ test('plugin manifests and typed documents retain declared identity while untype
 
 test('one capability declared by manifest and code merges, while duplicate typed and path document keys refuse every member', () => {
   const decisions = identityCandidateDecisions([
-    capability('provide', 'brew', 'recipe-engine', 4),
-    { ...capability('provide', 'brew', 'recipe-engine', 91), file: 'plugins/recipe-engine/server/index.mjs' },
-    document('.catalog/potions/one.yaml', { api_version: 'example.recipe/v1', doc_id: 'shared/id' }),
-    document('.catalog/potions/two.yaml', { api_version: 'example.recipe/v1', doc_id: 'shared/id' }),
+    capability('provide', 'batch', 'parcel-example-2', 4),
+    { ...capability('provide', 'batch', 'parcel-example-2', 91), file: 'plugins/parcel-example-2/server/index.mjs' },
+    document('.catalog/recipes/one.yaml', { api_version: 'example.recipe/v1', doc_id: 'shared/id' }),
+    document('.catalog/recipes/two.yaml', { api_version: 'example.recipe/v1', doc_id: 'shared/id' }),
     document('checks/fast.yaml', { api_version: null, doc_id: null }),
     document('checks/fast.yaml', { api_version: null, doc_id: null, line: 8 }),
     document('checks/slow.yaml', { api_version: null, doc_id: null }),
   ]);
   assert.deepEqual(decisions.map(decision =>
     decision.disposition === 'supported' ? decision.surface : decision.reason), [
-    'brew', 'brew', 'duplicate_declaration_key', 'duplicate_declaration_key',
+    'batch', 'batch', 'duplicate_declaration_key', 'duplicate_declaration_key',
     'duplicate_declaration_key', 'duplicate_declaration_key', 'checks/slow.yaml',
   ]);
 });

@@ -1,5 +1,7 @@
 import { posix } from 'node:path';
 import { stableCanonicalSha256, stableStringify, sha256 } from './lib.mjs';
+import { sourcePins } from './source-pin-identity.mjs';
+export { sourcePins };
 import { validateClaimMapShardManifest } from './claim-map-shards.mjs';
 import { Neo4jHttpClient } from './c3-serving-projection.mjs';
 // Head addressing and head reads live in their own module so a read-only client can import them
@@ -46,29 +48,6 @@ function safeJson(value) {
 // provenance.mapped_at with the wall clock of its run, so hashing the code graph verbatim gave two
 // byte-identical maps different identities and forced a full rebuild on every re-projection. When
 // the map really changes, source_head and code_plane_head in the same provenance block move with it.
-/**
- * A multi-repo estate has no single source commit: each repository carries its own pin. The
- * composite is the ordered {repository: sha} map, and its identity is that map's digest. A
- * single-repo estate keeps naming its commit directly, so existing custody is unchanged; the two
- * forms are distinguished by which field the artifact carries, never inferred.
- */
-export function sourcePins(provenance) {
-  const pins = provenance?.source_pins;
-  if (pins && typeof pins === 'object' && !Array.isArray(pins)) {
-    const entries = Object.entries(pins).sort(([left], [right]) => compare(left, right));
-    if (!entries.length) stateError('UNIFIED_PROJECTION_SOURCE_PINS_EMPTY', 'source_pins must name at least one repository');
-    for (const [repository, sha] of entries) {
-      if (!clean(repository) || !/^[0-9a-f]{40}$/u.test(String(sha))) {
-        stateError('UNIFIED_PROJECTION_SOURCE_PIN_INVALID', `source pin for ${repository} is not a full commit SHA`);
-      }
-    }
-    return Object.freeze({ pins: Object.fromEntries(entries), digest: sha256(canonical(Object.fromEntries(entries))) });
-  }
-  const head = clean(provenance?.source_head);
-  if (!head) return null;
-  return Object.freeze({ pins: null, digest: head });
-}
-
 function codeGraphIdentityDigest(codeGraph) {
   if (!codeGraph) return null;
   const { provenance, ...rest } = codeGraph;
@@ -112,7 +91,7 @@ export function verifiedProjectionShardInputs({ claim_map_manifest: manifest, co
 // The estate declares distinct kinds of thing, and the entry view can only surface a plugin or a
 // capability if the projection keeps that distinction. Entity kind follows the producer fact kind;
 // anything unrecognized stays a generic Referent rather than being guessed at.
-const ENTITY_KINDS = Object.freeze({
+export const ENTITY_KINDS = Object.freeze({
   capability_flow: 'Capability',
   envelope_flow: 'Envelope',
   http_route: 'Route',
@@ -135,22 +114,9 @@ const TOP_LEVEL_DECLARATION_KINDS = new Set([
   'Plugin', 'Repository', 'SchemaRecord',
 ]);
 
-// What an extracted fact IS, and what CONTAINS it.
-//
-// This table used to map a fact kind to a node kind and nothing else, and the projection gave
-// every fact one unconditional edge to the source commit. That was right for what it was built
-// for: a catalog row, a tool registration and a declaration comment really do hang off the commit
-// and nothing nearer. It became wrong the moment kinds arrived that have a real container -- a
-// section is in a document and under the section above it, a drawn edge is in the fence it was
-// read from. Those extractors computed the containment and put it in properties, where nothing
-// read it, and 23,206 facts projected as orphans of the commit without anything failing.
-//
-// So containment is DECLARED and there is no default. `commit` remains available and remains
-// correct for most kinds, but as a decision someone wrote down rather than as what happens when
-// nobody considered the question.
 export const FACT_CONTAINERS = Object.freeze(['commit', 'document', 'section', 'diagram']);
 
-const EXTRACTED_FACT_KINDS = Object.freeze({
+export const EXTRACTED_FACT_KINDS = Object.freeze({
   // A drawing and the edges read out of it are documentary assertions, never observations. They
   // are projected so a reader can ask what a document claims, and kept in their own kinds so no
   // adjudicator can mistake a drawn arrow for a witnessed relation.
@@ -176,13 +142,86 @@ const EXTRACTED_FACT_KINDS = Object.freeze({
     label: fact => fact.name },
   tool_registration_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
     label: fact => fact.reason },
+  // Three more refusal kinds named exactly like the seven already declared here, missed the same
+  // way an unregistered kind is always missed: the extractor shipped, the refusal fact carries a
+  // `reason` like every sibling refusal, and nothing forced this table to keep pace with it.
+  capability_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  http_route_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  manifest_completeness_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  literal_value: { node_kind: 'LiteralValue', contained_by: 'commit',
+    label: fact => `${fact.name} = ${fact.value_text ?? fact.value_kind}` },
+  predicate_literal: { node_kind: 'PredicateLiteral', contained_by: 'commit',
+    label: fact => fact.surface ?? fact.pattern ?? fact.name },
+  // Where a program declares its own failure, which is the answer to "what can this throw".
+  throw_site: { node_kind: 'ThrowSite', contained_by: 'commit',
+    label: fact => fact.thrown ?? fact.surface ?? 'throw' },
+  path_expression: { node_kind: 'PathExpression', contained_by: 'commit',
+    label: fact => fact.expression ?? fact.surface },
+  reference: { node_kind: 'Reference', contained_by: 'commit',
+    label: fact => fact.surface ?? fact.name },
+  yaml_record: { node_kind: 'YamlRecord', contained_by: 'commit',
+    label: fact => fact.record_key ?? fact.key_path ?? fact.file },
+  // THE DEPLOYED SURFACE. Infrastructure a component declares, uses, or is bound to by
+  // environment is what tells a reader which parts of an estate are shared and which belong to one
+  // product. All of it was extracted and none of it projected, so the map could describe code and
+  // documents while saying nothing about what either runs on.
+  aws_resource_declaration: { node_kind: 'AwsResource', contained_by: 'commit',
+    label: fact => `${fact.resource_type ?? 'resource'} ${fact.resource_name ?? fact.logical_id ?? ''}`.trim() },
+  aws_usage: { node_kind: 'AwsUsage', contained_by: 'commit',
+    label: fact => `${fact.service ?? 'aws'} ${fact.operation ?? fact.resource_name ?? ''}`.trim() },
+  aws_env_binding: { node_kind: 'EnvironmentBinding', contained_by: 'commit',
+    label: fact => `${fact.variable ?? fact.name} -> ${fact.resource_name ?? fact.value ?? '?'}` },
+  aws_usage_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  service_hostname: { node_kind: 'ServiceHostname', contained_by: 'commit',
+    label: fact => fact.host ?? fact.hostname ?? fact.value },
+  config_value_url: { node_kind: 'ConfiguredUrl', contained_by: 'commit',
+    label: fact => `${fact.key ?? fact.name ?? 'url'} = ${fact.url ?? fact.value ?? ''}` },
+  http_client: { node_kind: 'HttpClientCall', contained_by: 'commit',
+    label: fact => `${fact.method ?? 'call'} ${fact.target ?? fact.url ?? fact.surface ?? ''}`.trim() },
+  http_client_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  persistence_target: { node_kind: 'PersistenceTarget', contained_by: 'commit',
+    label: fact => `${fact.store ?? fact.kind_hint ?? 'store'} ${fact.target ?? fact.name ?? ''}`.trim() },
+  string_constant: { node_kind: 'StringConstant', contained_by: 'commit',
+    label: fact => `${fact.name ?? 'constant'} = ${fact.value ?? ''}` },
+  dep: { node_kind: 'Dependency', contained_by: 'commit',
+    label: fact => `${fact.name}${fact.version ? `@${fact.version}` : ''}` },
+  ts_path_alias: { node_kind: 'PathAlias', contained_by: 'commit',
+    label: fact => `${fact.alias} -> ${fact.target ?? ''}` },
+  envelope_kind_mention: { node_kind: 'EnvelopeMention', contained_by: 'commit',
+    label: fact => fact.envelope_kind ?? fact.kind_name ?? fact.surface },
+  inline_script: { node_kind: 'InlineScript', contained_by: 'commit',
+    label: fact => `inline script ${fact.file}:${fact.line}` },
+  inline_script_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  diagram_node: { node_kind: 'DiagramNode', contained_by: 'diagram',
+    label: fact => fact.identifier ?? fact.label ?? fact.node_id },
+  // The relational surface, which is where a product's data model actually lives.
+  sqlite_table: { node_kind: 'SqliteTable', contained_by: 'commit',
+    label: fact => fact.table ?? fact.name },
+  sqlite_id_column: { node_kind: 'SqliteIdColumn', contained_by: 'commit',
+    label: fact => `${fact.table ?? ''}.${fact.column ?? ''}` },
+  sqlite_ref: { node_kind: 'SqliteReference', contained_by: 'commit',
+    label: fact => `${fact.from_table ?? ''} -> ${fact.to_table ?? ''}` },
+  sqlite_comment: { node_kind: 'SqliteComment', contained_by: 'commit',
+    label: fact => fact.text ?? fact.comment ?? '' },
+  sql_migration: { node_kind: 'SqlMigration', contained_by: 'commit',
+    label: fact => fact.name ?? fact.file },
+  tf_ref: { node_kind: 'TerraformReference', contained_by: 'commit',
+    label: fact => `${fact.from ?? ''} -> ${fact.to ?? fact.target ?? ''}` },
+  yaml_record_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  yaml_parse_refusal: { node_kind: 'ExtractionRefusal', contained_by: 'commit',
+    label: fact => fact.reason },
+  // How much of a repository was read at all: the denominator every completeness claim needs.
+  coverage: { node_kind: 'RepositoryCoverage', contained_by: 'commit',
+    label: fact => `${fact.repo}: ${fact.files_scanned} scanned, ${fact.files_skipped} skipped` },
 });
 
-/**
- * A fact kind that names no container is a projection defect, not a fact to place by default: the
- * whole point of the declaration is that forgetting it fails instead of silently attaching 18,880
- * sections to a commit. Exported so the rule can be exercised against a registry other than ours.
- */
 export function validateFactKindRegistry(registry) {
   for (const [factKind, entry] of Object.entries(registry)) {
     if (!clean(entry?.node_kind) || typeof entry?.label !== 'function' || !FACT_CONTAINERS.includes(entry?.contained_by)) {
@@ -196,9 +235,9 @@ export function validateFactKindRegistry(registry) {
 validateFactKindRegistry(EXTRACTED_FACT_KINDS);
 
 const EXTRACTED_FACT_RELATION = 'observed_in';
-const EXTRACTED_FACT_PROJECTION_ADDITIONS = Object.freeze({
-  node_kinds: Object.freeze([...new Set([...Object.values(EXTRACTED_FACT_KINDS).map(entry => entry.node_kind), 'Assertion'])].sort(compare)),
-  relation_names: Object.freeze([EXTRACTED_FACT_RELATION, 'asserted_in', 'contains', 'read_from', 'relates_assertion'].sort(compare)),
+export const EXTRACTED_FACT_PROJECTION_ADDITIONS = Object.freeze({
+  node_kinds: Object.freeze([...new Set([...Object.values(EXTRACTED_FACT_KINDS).map(entry => entry.node_kind), 'Assertion', 'LiteralLeaf'])].sort(compare)),
+  relation_names: Object.freeze([EXTRACTED_FACT_RELATION, 'asserted_in', 'contains', 'declares_value', 'read_from', 'relates_assertion'].sort(compare)),
 });
 
 /**
@@ -304,12 +343,22 @@ function summaryForEvidence(row) {
   return row.kind;
 }
 
+// Neo4j refuses an index key over roughly 8 KB, and a projection that mints one dies with every
+// durable artifact already written. search_text is a FIND aid, not the record: the authoritative
+// value stays whole in `properties`, so bounding the index key loses nothing a reader can ask for.
+// The bound is per part, so one enormous value cannot crowd out the identifiers beside it.
+const SEARCH_PART_LIMIT = 512;
+const SEARCH_TEXT_LIMIT = 4096;
+
 function graphRecord(kind, id, label, properties = {}, searchParts = []) {
+  const bounded = [label, id, ...searchParts]
+    .filter(clean)
+    .map(part => String(part).slice(0, SEARCH_PART_LIMIT));
   const body = {
     node_id: id,
     kind,
     label: clean(label) || id,
-    search_text: [label, id, ...searchParts].filter(clean).join(' ').toLowerCase(),
+    search_text: bounded.join(' ').toLowerCase().slice(0, SEARCH_TEXT_LIMIT),
     properties,
   };
   return Object.freeze({ ...body, record_digest: sha256(canonical(body)) });
@@ -319,6 +368,62 @@ function graphEdge(relation, from, to, properties = {}, declaredId = null) {
   const body = { relation, from, to, properties };
   return Object.freeze({ ...body, edge_id: declaredId || `estate-edge:${sha256(canonical(body))}`,
     record_digest: sha256(canonical(body)) });
+}
+
+/**
+ * Every evaluated leaf of a literal declaration, addressed by the key path its author wrote.
+ *
+ * Only leaves that HAVE a value are emitted. An `unevaluated` entry records that the extractor
+ * declined to evaluate an expression, which is worth keeping on the declaration and worthless as
+ * an address: a node saying `config.github = <unevaluated>` answers no question anyone asks.
+ */
+export function literalLeaves(fact, cap = 4096) {
+  if (fact?.kind !== 'literal_value') return [];
+  const leaves = [];
+  const walk = (node, path) => {
+    if (leaves.length >= cap) return;
+    const children = node.entries || node.items || null;
+    if (children) {
+      children.forEach((child, index) => {
+        const step = child.key ?? `[${index}]`;
+        walk(child, path ? `${path}.${step}` : String(step));
+      });
+      return;
+    }
+    if (node.value === undefined || node.value === null) return;
+    leaves.push({ key_path: path, value: String(node.value),
+      value_kind: node.value_kind ?? null, line: node.line ?? null });
+  };
+  walk(fact, clean(fact.name) || '');
+  return leaves;
+}
+
+/**
+ * Address evaluated leaves without changing the address of a path that occurs once.
+ *
+ * Object literals may repeat an authored key. The traversal order is the extractor's source
+ * order, so it gives each repeated path a stable ordinal even when the source locations match.
+ */
+export function addressLiteralLeaves(fact, cap = 4096) {
+  const leaves = literalLeaves(fact, cap);
+  const multiplicity = new Map();
+  for (const leaf of leaves) {
+    multiplicity.set(leaf.key_path, (multiplicity.get(leaf.key_path) || 0) + 1);
+  }
+  const occurrence = new Map();
+  return leaves.map(leaf => {
+    const keyPathMultiplicity = multiplicity.get(leaf.key_path);
+    const keyPathOccurrence = (occurrence.get(leaf.key_path) || 0) + 1;
+    occurrence.set(leaf.key_path, keyPathOccurrence);
+    return Object.freeze({ ...leaf, key_path_occurrence: keyPathOccurrence, key_path_multiplicity: keyPathMultiplicity });
+  });
+}
+
+export function literalLeafId(factId, leaf) {
+  const address = leaf.key_path_multiplicity === 1
+    ? { factId, key_path: leaf.key_path }
+    : { factId, key_path: leaf.key_path, occurrence: leaf.key_path_occurrence };
+  return `literal-leaf:${sha256(canonical(address))}`;
 }
 
 function stateError(code, message, detail = {}) {
@@ -387,6 +492,7 @@ export function buildUnifiedEstateProjection({ claim_map: claimMap, code_graph: 
       source_path: claim.source.path,
       source_line: claim.source.line,
       source_quote: claim.source.quote,
+      section_path: claim.read_context?.section_path ?? null,
       valid_time_json: safeJson(claim.valid_time),
       proof_plan_json: safeJson(claim.proof_plan),
     }, [claim.claim_key, claim.source.path, claim.source.quote, receipt?.verdict, receipt?.realization]));
@@ -508,14 +614,6 @@ export function buildUnifiedEstateProjection({ claim_map: claimMap, code_graph: 
         resolution_receipt_id: binding.resolution_receipt_id || null,
       }));
     }
-    // Extracted facts that are not identity candidates (catalog rows, comments,
-    // empty declarations and tool registrations) are still first-class queryable
-    // observations. Their ids derive solely from their exact record content; no
-    // name matching or similarity join can merge two independently witnessed rows.
-    // Assertions are built over the WHOLE fact stream, not one fact at a time: a diagram's
-    // assertion cites the section containing it, and a per-fact call cannot see the section facts
-    // that arrived alongside. Built per-fact, every assertion in a 4,326-node projection cited a
-    // line number and no section at all.
     const assertionsByFact = new Map();
     for (const assertion of documentedAssertions(codeGraph.extracted_facts || []).assertions) {
       const key = `${assertion.source.document}\u0000${assertion.source.line}\u0000${assertion.nature.producer}\u0000${assertion.subject.kind}`;
@@ -526,22 +624,7 @@ export function buildUnifiedEstateProjection({ claim_map: claimMap, code_graph: 
     // are: a section and the diagram inside it arrive as separate facts, and neither can find the
     // other one fact at a time.
     const multiRepository = Boolean(sourcePins(codeGraph.provenance)?.pins);
-    // A Document node was minted only from claims, so a document nobody claimed anything about
-    // did not exist -- and its sections and diagrams then had no container. That was invisible
-    // while every document was read, and became 1,313 refusals the moment scope started
-    // withholding documents from the paid read. The structural extractor emits a `document` fact
-    // for every file it scans, which is the honest source for "this document exists": a document
-    // is real because it was read, not because a model found something to say about it.
-    // Documents are addressed relative to whatever root the code graph was joined against, and a
-    // fact knows two candidate paths: repository-relative (`file`) and estate-relative
-    // (`document_path`). Those differ by the project directory whenever an estate materializes a
-    // repository beneath it, and picking the wrong one mints a parallel set of Documents that
-    // nothing else references -- which is exactly what a first attempt here did, producing 2,308
-    // Documents for 1,154 files and calling the result zero refusals.
-    //
-    // So the space is decided ONCE, by asking which form the Documents already in the projection
-    // actually take, and then applied to every fact. Deciding per fact would be the same
-    // inference-from-absence that produced the defect.
+    // Preserve source witnesses; do not infer authority from naming conventions alone.
     const documentFacts = (codeGraph.extracted_facts || []).filter(fact => fact?.kind === 'document');
     const addressForm = (() => {
       const byFile = documentFacts.filter(fact => nodes.has(`doc:${clean(fact.file)}`)).length;
@@ -576,15 +659,68 @@ export function buildUnifiedEstateProjection({ claim_map: claimMap, code_graph: 
     const containment = containmentIndex(codeGraph.extracted_facts || [],
       { multi_repository: multiRepository, address_form: addressForm });
     const containmentCounts = {};
+    const unregisteredFactKinds = {};
     const containmentRefusals = {};
+    // A fact whose kind has no EXTRACTED_FACT_KINDS entry is not automatically LOST: its raw
+    // (repository, file, line, kind) may already be the witness an identity binding or a typed
+    // dependency relation cites, and a `document` fact is represented structurally by the
+    // Document loop above. Reconciling those routes here means the warning below distinguishes
+    // "already reaches the graph some other way" from "no matched explicit route" instead of
+    // reporting both as one undifferentiated number that a blanket exemption could then hide.
+    // This is a bounded, source-derived finding, not proof that a `no_matched_explicit_route` row
+    // has no indirect effect on the graph -- only that this reconciliation found none of the three
+    // checked routes for it.
+    const identityWitnessKeys = new Set((codeGraph.identity_bindings || [])
+      .map(binding => canonical([binding.repository, binding.file, binding.line, binding.fact_kind])));
+    const relationWitnessKeys = new Set();
+    for (const relation of codeGraph.relations || []) {
+      for (const witness of relation.witnesses || []) {
+        relationWitnessKeys.add(canonical([witness.repo, witness.file, witness.line]));
+      }
+    }
+    const unregisteredFactDispositions = {};
+    const unregisteredContentSeen = new Map();
     containmentReport = { placed: containmentCounts, refused: containmentRefusals,
+      // Extracted, carried the whole way here, and then not projected because no kind declared it.
+      // Empty is the healthy state; a number here is work the extractors did that the graph threw
+      // away, and it belongs in the receipt rather than in nobody's hands.
+      unregistered_fact_kinds: unregisteredFactKinds,
+      // Per-kind disposition of every unregistered row: how many are exact duplicates of a row
+      // already counted, how many are witnessed by a CodeFact identity binding or a typed
+      // dependency relation's cited site, how many are the structural-document route a `document`
+      // fact takes, and how many matched none of those and remain a named, inspectable finding.
+      unregistered_fact_dispositions: unregisteredFactDispositions,
       // Documents present because they were read rather than because they were claimed about.
       documents_from_structure: documentsFromStructure,
       // Which address space the projection resolved documents in, so a reader can tell.
       document_address_form: addressForm,
       document_address: multiRepository ? 'fact document_path (multi-repository estate)' : 'fact file (single-repository estate)' };
     for (const fact of codeGraph.extracted_facts || []) {
-      if (!fact || typeof fact !== 'object' || !EXTRACTED_FACT_KINDS[fact.kind]) continue;
+      if (!fact || typeof fact !== 'object') continue;
+      if (!EXTRACTED_FACT_KINDS[fact.kind]) {
+        unregisteredFactKinds[fact.kind] = (unregisteredFactKinds[fact.kind] || 0) + 1;
+        const disposition = unregisteredFactDispositions[fact.kind]
+          || (unregisteredFactDispositions[fact.kind] = { total: 0, duplicate_content_rows: 0,
+            identity_or_relation_witness: 0, structural_document: 0, no_matched_explicit_route: 0 });
+        disposition.total += 1;
+        const contentDigest = sha256(canonical(fact));
+        const seenForKind = unregisteredContentSeen.get(fact.kind) ?? new Set();
+        unregisteredContentSeen.set(fact.kind, seenForKind);
+        if (seenForKind.has(contentDigest)) {
+          disposition.duplicate_content_rows += 1;
+        } else {
+          seenForKind.add(contentDigest);
+          if (fact.kind === 'document') {
+            disposition.structural_document += 1;
+          } else if (identityWitnessKeys.has(canonical([fact.repo, fact.file, fact.line, fact.kind]))
+            || relationWitnessKeys.has(canonical([fact.repo, fact.file, fact.line]))) {
+            disposition.identity_or_relation_witness += 1;
+          } else {
+            disposition.no_matched_explicit_route += 1;
+          }
+        }
+        continue;
+      }
       const factId = `extracted-fact:${sha256(canonical(fact))}`;
       const declaration = EXTRACTED_FACT_KINDS[fact.kind];
       const kind = declaration.node_kind;
@@ -594,6 +730,22 @@ export function buildUnifiedEstateProjection({ claim_map: claimMap, code_graph: 
         document_path: containment.documents.get(factId) ?? null,
         line: fact.line || null, exact_fact_json: safeJson(fact),
       }, [fact.kind, fact.repo, fact.file, fact.entry_key_path, fact.name, fact.declaration_key, fact.declaration]));
+
+      for (const leaf of addressLiteralLeaves(fact)) {
+        const leafId = literalLeafId(factId, leaf);
+        const shown = leaf.value.length > 200 ? `${leaf.value.slice(0, 200)}…` : leaf.value;
+        addNode(graphRecord('LiteralLeaf', leafId, `${leaf.key_path} = ${shown}`, {
+          fact_kind: fact.kind, repository: fact.repo || null, file: fact.file || null,
+          declaration: fact.name ?? null, key_path: leaf.key_path,
+          key_path_occurrence: leaf.key_path_occurrence, key_path_multiplicity: leaf.key_path_multiplicity,
+          value: leaf.value, value_kind: leaf.value_kind, line: leaf.line ?? fact.line ?? null,
+        }, [leaf.key_path, leaf.value, fact.file, fact.repo]));
+        addEdge(graphEdge('declares_value', factId, leafId, {
+          key_path: leaf.key_path,
+          key_path_occurrence: leaf.key_path_occurrence,
+          key_path_multiplicity: leaf.key_path_multiplicity,
+        }));
+      }
 
       // Exactly one structural parent per fact: the thing that contains it when the kind declares
       // a container and that container is present, and otherwise the commit -- with the reason
@@ -645,10 +797,8 @@ export function buildUnifiedEstateProjection({ claim_map: claimMap, code_graph: 
           },
           [assertion.subject.predicate, assertion.subject.from?.text, assertion.subject.to?.text,
             assertion.source.section_path]));
-        // The assertion is asserted BY its document, and read FROM the fact that carries it.
-        const documentId = `doc:${assertion.source.document}`;
-        // The same silent skip that hid the flat documentary plane: 320 of 4,646 assertions lost
-        // their document edge and nothing counted them. An absent document is now an outcome.
+        // Preserve source witnesses; do not infer authority from naming conventions alone.
+        const documentId = `doc:${containment.documents.get(factId) ?? assertion.source.document}`;
         if (nodes.has(documentId)) addEdge(graphEdge('asserted_in', assertion.assertion_id, documentId));
         else containmentRefusals['assertion:document_absent'] = (containmentRefusals['assertion:document_absent'] || 0) + 1;
         addEdge(graphEdge('read_from', assertion.assertion_id, factId, { producer: assertion.nature.producer }));
@@ -1094,10 +1244,7 @@ export async function pruneEstateProjections({ client, retain_superseded: retain
   if (!ownIds.length) {
     fail('ESTATE_PROJECTION_RETENTION_UNSAFE', 'refusing to prune without a selected or working head');
   }
-  // One database serves every estate, so retention is scoped two ways and both matter. Candidates
-  // come only from this estate's own generations; and every head in the database is protected
-  // whatever estate it belongs to, so a mis-scoped call can still never delete a projection some
-  // other estate is serving.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const headRows = await client.query(`
     MATCH (h:EstateProjectionHead) WHERE h.projection_id IS NOT NULL RETURN h.projection_id
   `);

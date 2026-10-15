@@ -7,7 +7,7 @@ import {
   buildExtractionCacheBinding, materializeExtractionCache, validateExtractionCache,
 } from '../tools/extraction-cache.mjs';
 
-const sourceHead = '90ec8527ca8fa5957dc52e91d25414ff5980e1fd';
+const sourceHead = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const otherHead = '1111111111111111111111111111111111111111';
 
 function fixture() {

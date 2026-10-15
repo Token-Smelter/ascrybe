@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { sha256, stableStringify, writeStableCanonical } from './lib.mjs';
+import { stableCanonicalSha256, stableStringify, writeStableCanonical } from './lib.mjs';
 
 export const CLAIM_EVIDENCE_EXPLORER_SCHEMA = 'estate-map/claim-evidence-explorer/v1';
 const canonical = value => stableStringify(value).trim();
@@ -12,7 +12,7 @@ function cssClass(value) {
   return String(value || 'unknown').replace(/[^a-z0-9_-]/giu, '-').toLowerCase();
 }
 
-// This page is a convenience view, not the corpus. At estate scale (111,499 claims) rendering every
+// This page is a convenience view, not the corpus. Rendering every
 // claim exceeded V8's maximum string length and produced a page no browser could open, which failed
 // the whole run AFTER its data artifacts were already written. The authoritative record is the
 // receipt written beside this page and the claim-evidence shards; the bound below is disclosed in
@@ -49,7 +49,11 @@ function explorerModel(map) {
     claims,
     edges: map.edges,
   };
-  return Object.freeze({ ...body, digest: sha256(canonical(body)) });
+  // The digest is over the WHOLE model, which at corpus scale exceeds V8's maximum string length.
+  // The streaming hash emits identical canonical bytes without ever holding the document. The page
+  // payload and the receipt writer were already converted; this call was the third site and threw
+  // after every durable artifact had been written, so a complete run still exited non-zero.
+  return Object.freeze({ ...body, digest: stableCanonicalSha256(body) });
 }
 
 const css = `:root{color-scheme:light;--canvas:oklch(.965 .008 235);--surface:oklch(.995 .002 235);--ink:oklch(.20 .025 240);--muted:oklch(.47 .026 240);--line:oklch(.84 .018 235);--green:oklch(.55 .12 145);--blue:oklch(.55 .13 245);--amber:oklch(.65 .14 78);--red:oklch(.56 .17 25);--gray:oklch(.56 .02 240);--purple:oklch(.54 .14 300);--focus:oklch(.5 .17 250)}*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,oklch(.91 .035 230) 0,transparent 28rem),var(--canvas);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,sans-serif}.shell{max-width:96rem;margin:auto;padding:1.25rem 1.5rem 5rem}.mast{display:grid;grid-template-columns:minmax(20rem,1fr) minmax(22rem,.68fr);gap:3rem;align-items:end;padding:2.5rem 0 1.4rem;border-bottom:1px solid var(--line)}h1{max-width:21ch;margin:0 0 .65rem;font-size:2.4rem;line-height:1.05;letter-spacing:-.035em;text-wrap:balance}.lede{max-width:70ch;margin:0;color:var(--muted)}.sha{padding:.8rem 1rem;background:var(--ink);color:var(--surface);font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.metrics{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line)}.metric{min-width:9rem;padding:1rem 1.5rem 1rem 0;margin-right:1.7rem}.metric strong{display:block;font:1.35rem/1.2 ui-monospace,monospace}.metric span{color:var(--muted)}.toolbar{display:flex;flex-wrap:wrap;gap:.7rem;align-items:end;padding:1.4rem 0}.toolbar label{display:grid;gap:.35rem;font-weight:650}.toolbar input,.toolbar select{min-height:2.75rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:.65rem .75rem}.toolbar input{width:min(36rem,72vw)}.toolbar input:focus,.toolbar select:focus,button:focus-visible,summary:focus-visible{outline:3px solid color-mix(in oklch,var(--focus) 35%,transparent);outline-offset:2px}.timeline{display:grid;gap:.85rem}.claim{background:color-mix(in oklch,var(--surface) 87%,transparent);border:1px solid var(--line)}.claim[hidden]{display:none}.claim summary{display:grid;grid-template-columns:minmax(12rem,.34fr) minmax(18rem,1fr) auto;gap:1rem;align-items:start;padding:1rem;cursor:pointer}.identity{font:12px/1.45 ui-monospace,monospace;overflow-wrap:anywhere}.statement{font-weight:700;text-wrap:pretty}.status{display:flex;gap:.35rem;justify-content:end;flex-wrap:wrap}.tag{padding:.16rem .45rem;border:1px solid currentColor;font-size:.76rem;white-space:nowrap}.tag.supported{color:var(--green)}.tag.refuted,.tag.diverged{color:var(--red)}.tag.underdetermined,.tag.unverifiable,.tag.unknown{color:oklch(.48 .12 75)}.tag.implemented{color:var(--blue)}.tag.not_started{color:var(--blue)}.tag.removed,.tag.superseded{color:var(--gray)}.detail{display:grid;grid-template-columns:minmax(18rem,.65fr) minmax(24rem,1.35fr);gap:1.5rem;padding:0 1rem 1.2rem}.source{margin:.4rem 0 0;padding:.75rem;background:var(--ink);color:var(--surface);font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}.facts{border-top:1px solid var(--line)}.fact{display:grid;grid-template-columns:8rem 1fr;gap:1rem;padding:.65rem 0;border-bottom:1px solid var(--line)}.fact strong{font-size:.8rem;text-transform:none}.fact p{margin:0}.fact code{font:12px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}.supersession{margin-top:.8rem;padding:.65rem;border:1px solid var(--line);color:var(--muted)}.legend{display:flex;gap:.7rem;flex-wrap:wrap;margin:.4rem 0 1.2rem;color:var(--muted)}.legend span{display:flex;align-items:center;gap:.35rem}.legend i{width:.65rem;height:.65rem;border-radius:50%;background:currentColor}.empty{padding:2rem;border:1px dashed var(--line);color:var(--muted)}@media(max-width:800px){.mast,.detail{grid-template-columns:1fr}.claim summary{grid-template-columns:1fr}.status{justify-content:start}.sha{margin-top:1rem}.fact{grid-template-columns:1fr}}@media(prefers-reduced-motion:no-preference){.claim{transition:border-color 180ms cubic-bezier(.22,1,.36,1),background-color 180ms cubic-bezier(.22,1,.36,1)}.claim:hover{border-color:color-mix(in oklch,var(--focus) 40%,var(--line))}}`;

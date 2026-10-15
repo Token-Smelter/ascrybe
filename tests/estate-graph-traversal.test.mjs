@@ -29,8 +29,8 @@ function projectedDocument(path) {
 
 function manifestConsumerRows() {
   const declarations = [
-    ['publisher', 'publishes_envelopes:\n  - kind: work_order.accepted'],
-    ['subscriber', 'subscribes_envelopes:\n  - kind: work_order.accepted'],
+    ['publisher', 'publishes_envelopes:\n  - kind: parcel_order.accepted'],
+    ['subscriber', 'subscribes_envelopes:\n  - kind: parcel_order.accepted'],
   ];
   const candidates = declarations.flatMap(([name, source]) => {
     const file = `plugins/${name}/plugin.yaml`;
@@ -76,17 +76,17 @@ test('neighbors emits directed bounded records and rejects unsafe graph inputs b
   const seen = [];
   const graph = queries(async (statement, parameters) => {
     seen.push({ statement, parameters });
-    if (statement.includes('LIMIT 2')) return [['envelope:work_order.accepted', 'Envelope', 'work_order.accepted', '{}']];
+    if (statement.includes('LIMIT 2')) return [['envelope:parcel_order.accepted', 'Envelope', 'parcel_order.accepted', '{}']];
     return [
-      ['edge:consume', 'consumes', 'plugin:consumer', 'envelope:work_order.accepted', 'plugin:consumer', 'Plugin', 'consumer', '{}', '{}'],
-      ['edge:publish', 'publishes_envelope', 'plugin:publisher', 'envelope:work_order.accepted', 'plugin:publisher', 'Plugin', 'publisher', '{}', '{}'],
-      ['edge:overflow', 'consumes', 'plugin:other', 'envelope:work_order.accepted', 'plugin:other', 'Plugin', 'other', '{}', '{}'],
+      ['edge:consume', 'consumes', 'plugin:consumer', 'envelope:parcel_order.accepted', 'plugin:consumer', 'Plugin', 'consumer', '{}', '{}'],
+      ['edge:publish', 'publishes_envelope', 'plugin:publisher', 'envelope:parcel_order.accepted', 'plugin:publisher', 'Plugin', 'publisher', '{}', '{}'],
+      ['edge:overflow', 'consumes', 'plugin:other', 'envelope:parcel_order.accepted', 'plugin:other', 'Plugin', 'other', '{}', '{}'],
     ];
   });
-  const result = await graph.neighbors({ id: 'envelope:work_order.accepted', direction: 'in', limit: 2 });
+  const result = await graph.neighbors({ id: 'envelope:parcel_order.accepted', direction: 'in', limit: 2 });
   assert.deepEqual(result.data.edges.map(edge => [edge.relation, edge.from, edge.to]), [
-    ['consumes', 'plugin:consumer', 'envelope:work_order.accepted'],
-    ['publishes_envelope', 'plugin:publisher', 'envelope:work_order.accepted'],
+    ['consumes', 'plugin:consumer', 'envelope:parcel_order.accepted'],
+    ['publishes_envelope', 'plugin:publisher', 'envelope:parcel_order.accepted'],
   ]);
   assert.equal(result.truncated, true);
   assert.equal(seen.at(-1).parameters.direction, 'in');
@@ -111,27 +111,27 @@ test('projected raw document IDs execute the traversal advertised by search', as
 
 test('neighbors uses explicit code-point ID order', async () => {
   const graph = queries(async statement => {
-    if (statement.includes('LIMIT 2')) return [['envelope:work_order.accepted', 'Envelope', 'work_order.accepted', '{}']];
+    if (statement.includes('LIMIT 2')) return [['envelope:parcel_order.accepted', 'Envelope', 'parcel_order.accepted', '{}']];
     return [
-      ['edge:é', 'consumes', 'doc:é', 'envelope:work_order.accepted', 'doc:é', 'Document', 'é', '{}', '{}'],
-      ['edge:a', 'consumes', 'doc:a', 'envelope:work_order.accepted', 'doc:a', 'Document', 'a', '{}', '{}'],
-      ['edge:%', 'consumes', 'doc:%', 'envelope:work_order.accepted', 'doc:%', 'Document', '%', '{}', '{}'],
-      ['edge:Z', 'consumes', 'doc:Z', 'envelope:work_order.accepted', 'doc:Z', 'Document', 'Z', '{}', '{}'],
+      ['edge:é', 'consumes', 'doc:é', 'envelope:parcel_order.accepted', 'doc:é', 'Document', 'é', '{}', '{}'],
+      ['edge:a', 'consumes', 'doc:a', 'envelope:parcel_order.accepted', 'doc:a', 'Document', 'a', '{}', '{}'],
+      ['edge:%', 'consumes', 'doc:%', 'envelope:parcel_order.accepted', 'doc:%', 'Document', '%', '{}', '{}'],
+      ['edge:Z', 'consumes', 'doc:Z', 'envelope:parcel_order.accepted', 'doc:Z', 'Document', 'Z', '{}', '{}'],
     ];
   });
-  const result = await graph.neighbors({ id: 'envelope:work_order.accepted', limit: 10 });
+  const result = await graph.neighbors({ id: 'envelope:parcel_order.accepted', limit: 10 });
   assert.deepEqual(result.data.adjacent_nodes.map(node => node.id), ['doc:%', 'doc:Z', 'doc:a', 'doc:é']);
 });
 
 test('consumers groups publisher and subscriber rows derived from the real manifest producer', async () => {
   const rows = manifestConsumerRows();
   const graph = queries(async statement => {
-    if (statement.includes('LIMIT 2')) return [['envelope:work_order.accepted', 'Envelope', 'work_order.accepted', '{}']];
+    if (statement.includes('LIMIT 2')) return [['envelope:parcel_order.accepted', 'Envelope', 'parcel_order.accepted', '{}']];
     if (statement.includes('count(r)')) return [...new Map(rows.map(row => [row[1], 0]))].map(([relation]) =>
       [relation, rows.filter(row => row[1] === relation).length]);
     return rows;
   });
-  const result = await graph.consumers({ id: 'envelope:work_order.accepted' });
+  const result = await graph.consumers({ id: 'envelope:parcel_order.accepted' });
   assert.deepEqual({ publishers: result.data.publishers.map(group => [group.relation, group.count]),
     consumers: result.data.consumers.map(group => [group.relation, group.count]),
     zero: [result.data.has_zero_publishers, result.data.has_zero_consumers] }, {
@@ -143,15 +143,15 @@ test('consumers groups publisher and subscriber rows derived from the real manif
 
 test('consumers returns one node per distinct participant while retaining every edge', async () => {
   const rows = [
-    ['edge:1', 'publishes_envelope', 'module:server', 'Module', 'server/index.mjs', '{}', 'module:server', 'envelope:work_order.accepted', '{}'],
-    ['edge:2', 'publishes_envelope', 'module:server', 'Module', 'server/index.mjs', '{}', 'module:server', 'envelope:work_order.accepted', '{}'],
+    ['edge:1', 'publishes_envelope', 'module:server', 'Module', 'server/index.mjs', '{}', 'module:server', 'envelope:parcel_order.accepted', '{}'],
+    ['edge:2', 'publishes_envelope', 'module:server', 'Module', 'server/index.mjs', '{}', 'module:server', 'envelope:parcel_order.accepted', '{}'],
   ];
   const graph = queries(async statement => {
-    if (statement.includes('LIMIT 2')) return [['envelope:work_order.accepted', 'Envelope', 'work_order.accepted', '{}']];
+    if (statement.includes('LIMIT 2')) return [['envelope:parcel_order.accepted', 'Envelope', 'parcel_order.accepted', '{}']];
     if (statement.includes('count(r)')) return [['publishes_envelope', rows.length]];
     return rows;
   });
-  const group = (await graph.consumers({ id: 'envelope:work_order.accepted' })).data.publishers[0];
+  const group = (await graph.consumers({ id: 'envelope:parcel_order.accepted' })).data.publishers[0];
   assert.deepEqual({ nodes: group.nodes.map(node => node.id), distinct: group.distinct_node_count, returned: group.returned_count,
     edges: group.edges.map(edge => edge.id) },
   { nodes: ['module:server'], distinct: 1, returned: 2, edges: ['edge:1', 'edge:2'] });
@@ -159,18 +159,18 @@ test('consumers returns one node per distinct participant while retaining every 
 
 test('benchmark filtering marks consumers counts unavailable from a real query result', async () => {
   const graph = queries(async statement => {
-    if (statement.includes('LIMIT 2')) return [['envelope:work_order.accepted', 'Envelope', 'work_order.accepted', '{}']];
+    if (statement.includes('LIMIT 2')) return [['envelope:parcel_order.accepted', 'Envelope', 'parcel_order.accepted', '{}']];
     if (statement.includes('count(r)')) return [['publishes_envelope', 2], ['subscribes_envelope', 1]];
     return [
       ['edge:publisher:visible', 'publishes_envelope', 'plugin:visible', 'Plugin', 'visible', '{"source_path":"src/visible.mjs"}',
-        'plugin:visible', 'envelope:work_order.accepted', '{}'],
+        'plugin:visible', 'envelope:parcel_order.accepted', '{}'],
       ['edge:publisher:excluded', 'publishes_envelope', 'plugin:excluded', 'Plugin', 'excluded', '{"source_path":"benchmarks/answer-key.md"}',
-        'plugin:excluded', 'envelope:work_order.accepted', '{}'],
+        'plugin:excluded', 'envelope:parcel_order.accepted', '{}'],
       ['edge:consumer:visible', 'subscribes_envelope', 'plugin:consumer', 'Plugin', 'consumer', '{"source_path":"src/consumer.mjs"}',
-        'plugin:consumer', 'envelope:work_order.accepted', '{}'],
+        'plugin:consumer', 'envelope:parcel_order.accepted', '{}'],
     ];
   });
-  const producerResult = await graph.consumers({ id: 'envelope:work_order.accepted' });
+  const producerResult = await graph.consumers({ id: 'envelope:parcel_order.accepted' });
   assert.equal(producerResult.data.publisher_count, 2);
   const filtered = filterBenchmarkRows(producerResult, { material: 'committed', excluded_path_prefixes: ['benchmarks'] });
   assert.equal(filtered.filtered, 1);

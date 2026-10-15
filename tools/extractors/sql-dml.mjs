@@ -1,42 +1,4 @@
-// F5 — SQL STATEMENT FACTS (INSERT/UPDATE COLUMN LISTS) + MIGRATION OPERATIONS
-// (orientation-test-report.md §7.2 P2).
-//
-// WHY THIS EXISTS. §7.2 F5: "The map extracts `CREATE TABLE` well (it reported
-// the `envelopes` base table at `db.mjs:13` with 11 columns — verified correct)
-// but sees NO DML and NO `ALTER`. The base-DDL-vs-live-INSERT divergence is
-// exactly the class of surprise a map should own."
-//
-// Q20 asks which columns the live `INSERT INTO envelopes` lists that the frozen
-// base DDL does not, and what mechanism reconciles them. The INSERT is at
-// src/substrate/envelopeBus.mjs:48 (verified at the base of record) and the
-// pre-F5 map had no fact of any kind for it — `extractors/sqlite-ddl.mjs`
-// parses `CREATE TABLE` only, and `extractors/sql.mjs` matches `.sql` files, of
-// which this estate has none.
-//
-// WHAT IT EXTRACTS.
-//   sql_dml         one per INSERT (with its explicit column list), UPDATE
-//                   (with its SET column list) or DELETE, at the statement's
-//                   real line.
-//   sql_migration   one per ALTER TABLE operation (ADD/DROP/RENAME COLUMN,
-//                   RENAME TO) and per CREATE INDEX — the operations that make
-//                   a live table diverge from its frozen base DDL.
-//
-// WHAT IT REFUSES, TYPED. An `INSERT INTO t VALUES (...)` with NO explicit
-// column list is emitted with `columns: null` and
-// `refusal: 'insert_without_explicit_column_list'` — the column set is
-// positional against the live table and is NOT derivable from this statement.
-// An UPDATE whose SET clause is built by string concatenation emits
-// `columns: null` with `refusal: 'set_clause_not_statically_readable'`.
-// Guessing either would be exactly the fabrication class this map does not have.
-//
-// COMMENT GUARD (same reason as extractors/sqlite-ddl.mjs). A JS line comment
-// or an SQL `--` comment that QUOTES an INSERT is prose about the DDL, not DDL.
-// Both are stripped before matching; without this guard this extractor's own
-// header would mint an `envelopes` INSERT fact.
-//
-// READ-ONLY / NO-EXEC: line-oriented text scan over already-read, already
-// secret-redacted source. It opens no database, prepares no statement, and
-// executes no SQL.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 const IDENT = String.raw`[A-Za-z_][\w$]*|"[^"]+"|\`[^\`]+\`|\[[^\]]+\]`;
 const JS_COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;

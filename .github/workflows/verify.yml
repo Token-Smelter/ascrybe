@@ -32,6 +32,7 @@ jobs:
           esac
       - run: npm run verify:falsifiers
       - run: node scripts/check-artifact-hygiene.mjs --tracked
+      - run: node scripts/check-design-authority.mjs
       # The bundle is what consumers install; a version match with a changed data model is exactly
       # the drift a version check alone misses.
       - run: npm run skill:bundle

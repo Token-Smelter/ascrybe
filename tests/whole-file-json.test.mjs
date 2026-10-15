@@ -29,16 +29,15 @@ test('an artifact past the string ceiling is refused, naming itself and the numb
 });
 
 test('the ceiling decision is a pure function of size', () => {
-  // The real code graph for a 1,154-document estate: 403,750,181 of 536,870,888 bytes.
-  const real = artifactHeadroom(403_750_181);
+  const near = artifactHeadroom(Math.floor(STRING_CEILING * 0.75));
   const over = artifactHeadroom(STRING_CEILING + 1);
   const small = artifactHeadroom(2_048);
   assert.deepEqual({
-    real: [real.exceeds, real.approaching, Number(real.fraction.toFixed(2))],
+    near: [near.exceeds, near.approaching, Number(near.fraction.toFixed(2))],
     over: [over.exceeds, over.approaching],
     small: [small.exceeds, small.approaching],
   }, {
-    real: [false, true, 0.75],
+    near: [false, true, 0.75],
     over: [true, false],
     small: [false, false],
   });

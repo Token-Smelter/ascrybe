@@ -9,6 +9,7 @@ import {
   buildUnifiedEstateProjection, ensureEstateProjectionSchema, ESTATE_SCHEMA_NAMES,
   estateSlot, promoteEstateProjection, pruneEstateProjections, sourcePins, stageEstateProjection,
   WRITE_ESTATE_EDGES_STATEMENT, WRITE_ESTATE_NODES_STATEMENT,
+  EXTRACTED_FACT_KINDS, addressLiteralLeaves, literalLeafId,
 } from '../tools/estate-graph-projection.mjs';
 import { Neo4jHttpClient } from '../tools/c3-serving-projection.mjs';
 import { extractEstate } from '../tools/extract.mjs';
@@ -61,10 +62,10 @@ function codeGraph() {
       'doc:docs/design.md': { k: 'entity', l: 'docs/design.md', ns: 'document', r: 'document' },
       'doc:docs/INDEX.md': { k: 'entity', l: 'docs/INDEX.md', ns: 'document', r: 'document' },
       'referent:query': { k: 'entity', l: 'queryGraph', ns: 'fixture/src/query.mjs', r: 'symbol' },
-      'referent:plugin': { k: 'entity', l: 'task-orchestration', ns: 'plugins/task-orchestration/plugin.yaml', r: 'yaml_document' },
-      'referent:capability': { k: 'entity', l: 'brew', ns: '["fixture","capability"]', r: 'capability_flow' },
-      'referent:envelope': { k: 'entity', l: 'brew.started', ns: '["fixture","envelope"]', r: 'envelope_flow' },
-      'referent:potion': { k: 'entity', l: 'builtin/single-task', ns: '["fixture","example.recipe/v1"]', r: 'yaml_document' },
+      'referent:plugin': { k: 'entity', l: 'parcel-example-1', ns: 'plugins/parcel-example-1/plugin.yaml', r: 'yaml_document' },
+      'referent:capability': { k: 'entity', l: 'batch', ns: '["fixture","capability"]', r: 'capability_flow' },
+      'referent:envelope': { k: 'entity', l: 'batch.started', ns: '["fixture","envelope"]', r: 'envelope_flow' },
+      'referent:recipe': { k: 'entity', l: 'builtin/single-task', ns: '["fixture","example.recipe/v1"]', r: 'yaml_document' },
     },
     identity_bindings: [{
       fact_id: 'fact:one', fact_kind: 'symbol', mention_id: 'mention:one',
@@ -86,7 +87,7 @@ test('unified projection connects document, claim, evidence, code fact, and Refe
     binaryOrder: state.nodes.findIndex(row => row.node_id === 'doc:docs/INDEX.md')
       < state.nodes.findIndex(row => row.node_id === 'doc:docs/design.md'),
     factDegree: state.nodes.find(row => row.node_id === 'fact:one').degree,
-    domainKinds: ['referent:plugin', 'referent:capability', 'referent:envelope', 'referent:potion']
+    domainKinds: ['referent:plugin', 'referent:capability', 'referent:envelope', 'referent:recipe']
       .map(id => state.nodes.find(row => row.node_id === id).kind),
     symbolKind: state.nodes.find(row => row.node_id === 'referent:query').kind,
     about: [edge('about').from, edge('about').to],
@@ -192,7 +193,7 @@ test('projection gives newly extracted observations stable nodes and queryable r
     observed: projection.edges.filter(edge => edge.relation === 'observed_in').length,
     additions: projection.projection_additions }, {
     kinds: ['CatalogEntry', 'DeclarationComment', 'EmptyDeclaration', 'ExtractionRefusal', 'ToolRegistration'], ids: true, observed: 5,
-    additions: { node_kinds: ['Assertion', 'CatalogEntry', 'DeclarationComment', 'Diagram', 'DiagramRelation', 'DocumentSection', 'EmptyDeclaration', 'ExtractionRefusal', 'ToolRegistration'], relation_names: ['asserted_in', 'contains', 'observed_in', 'read_from', 'relates_assertion'] },
+    additions: { node_kinds: ['Assertion', 'AwsResource', 'AwsUsage', 'CatalogEntry', 'ConfiguredUrl', 'DeclarationComment', 'Dependency', 'Diagram', 'DiagramNode', 'DiagramRelation', 'DocumentSection', 'EmptyDeclaration', 'EnvelopeMention', 'EnvironmentBinding', 'ExtractionRefusal', 'HttpClientCall', 'InlineScript', 'LiteralLeaf', 'LiteralValue', 'PathAlias', 'PathExpression', 'PersistenceTarget', 'PredicateLiteral', 'Reference', 'RepositoryCoverage', 'ServiceHostname', 'SqlMigration', 'SqliteComment', 'SqliteIdColumn', 'SqliteReference', 'SqliteTable', 'StringConstant', 'TerraformReference', 'ThrowSite', 'ToolRegistration', 'YamlRecord'], relation_names: ['asserted_in', 'contains', 'declares_value', 'observed_in', 'read_from', 'relates_assertion'] },
   });
 });
 
@@ -214,20 +215,24 @@ test('remap forwards the exact extractor stream into the unified projection', as
       .trim().split('\n').filter(Boolean).map(JSON.parse);
     const graph = JSON.parse(readFileSync(join(remap, 'adjacency.json'), 'utf8'));
     const projection = buildUnifiedEstateProjection({ claim_map: claimMap(), code_graph: graph });
-    const observedKinds = ['catalog_entry', 'catalog_entry_refusal', 'declaration_comment',
-      'manifest_empty_declaration', 'tool_registration', 'tool_registration_refusal'];
+    // Derived from the registry, never hand-listed: a hand-listed set is what let the projection
+    // discard 62.6% of the extractor stream while this test stayed green.
+    const observedKinds = Object.keys(EXTRACTED_FACT_KINDS);
     const expectedObserved = sourceFacts.filter(fact => observedKinds.includes(fact.kind));
     assert.deepEqual({
-      source: expectedObserved.map(fact => fact.kind).sort(),
+      source: expectedObserved.reduce((held, fact) =>
+        ({ ...held, [fact.kind]: (held[fact.kind] || 0) + 1 }), {}),
       forwarded: graph.extracted_facts,
       count: graph.counts.extracted_facts,
       streamDigest: /^[0-9a-f]{64}$/u.test(graph.provenance.extracted_fact_stream_digest || ''),
       projected: projection.edges.filter(edge => edge.relation === 'observed_in').length,
     }, {
-      source: ['catalog_entry', 'catalog_entry', 'catalog_entry', 'catalog_entry',
-        'catalog_entry_refusal', 'catalog_entry_refusal', 'declaration_comment',
-        'declaration_comment', 'declaration_comment',
-        'manifest_empty_declaration', 'tool_registration', 'tool_registration_refusal'],
+      // Counted per kind rather than listed per occurrence: the assertion is that every
+      // REGISTERED kind in the stream reaches the projection, and a 21-line run of one kind
+      // obscured that. A kind appearing here that the registry does not declare is the defect.
+      source: { catalog_entry: 4, catalog_entry_refusal: 2, coverage: 1,
+        declaration_comment: 3, literal_value: 1, manifest_empty_declaration: 1,
+        tool_registration: 1, tool_registration_refusal: 1, yaml_record: 21 },
       forwarded: sourceFacts,
       count: sourceFacts.length,
       streamDigest: true,
@@ -240,11 +245,11 @@ test('a multi-repo estate binds a composite pin map whose digest is its source i
   const pins = { 'component-a': 'a'.repeat(40), 'component-b': 'b'.repeat(40) };
   const digest = sourcePins({ source_pins: pins }).digest;
   const claim = claimMap();
-  claim.project = { id: 'sw', sha: digest };
+  claim.project = { id: 'example-estate', sha: digest };
   claim.claims = []; claim.evidence = []; claim.obligation_results = [];
   claim.adjudication_receipts = []; claim.edges = [];
   const graph = codeGraph();
-  graph.provenance = { source_pins: pins, code_plane_head: 'code-plane:sw' };
+  graph.provenance = { source_pins: pins, code_plane_head: 'code-plane:example-estate' };
   graph.relations = [];
   const state = buildUnifiedEstateProjection({ claim_map: claim, code_graph: graph });
   assert.deepEqual({
@@ -254,7 +259,7 @@ test('a multi-repo estate binds a composite pin map whose digest is its source i
     singleRepoUnchanged: sourcePins({ source_head: '1'.repeat(40) }).digest,
   }, { recorded: pins, stable: true, singleRepoUnchanged: '1'.repeat(40) });
 
-  graph.provenance = { source_pins: { 'component-a': 'c'.repeat(40) }, code_plane_head: 'code-plane:sw' };
+  graph.provenance = { source_pins: { 'component-a': 'c'.repeat(40) }, code_plane_head: 'code-plane:example-estate' };
   assert.throws(() => buildUnifiedEstateProjection({ claim_map: claim, code_graph: graph }),
     error => error.code === 'UNIFIED_PROJECTION_SOURCE_MISMATCH');
   assert.throws(() => sourcePins({ source_pins: { 'component-a': 'not-a-sha' } }),
@@ -267,8 +272,6 @@ test('a projected assertion cites the section containing it, not only its line',
   claim.adjudication_receipts = []; claim.edges = [];
   const graph = codeGraph();
   graph.relations = [];
-  // Sections and diagram facts arrive in one stream; building assertions per fact could not see
-  // the sections, so every assertion in a 4,326-node projection cited no section at all.
   graph.extracted_facts = [
     { kind: 'document_section', repo: 'fixture', file: 'docs/design.md', line: 1, line_end: 40,
       section_path: 'Design', section_depth: 1 },
@@ -438,28 +441,28 @@ test('retention scopes candidates to one estate and protects every head in the d
   client.query = async (statement, parameters) => {
     statements.push({ statement, parameters });
     if (statement.includes('EstateProjectionHead {slot: slot}') || statement.includes('UNWIND [$selected_slot')) {
-      return [['sw:selected', 'estate-projection:sw-live', 'selected', '1'.repeat(40), 'c', 'cm', 'cg', 1, 1, 1, 1],
-        ['sw:working', null, null, null, null, null, null, 0, 0, 0, 0]];
+      return [['example-estate:selected', 'estate-projection:example-estate-live', 'selected', '1'.repeat(40), 'c', 'cm', 'cg', 1, 1, 1, 1],
+        ['example-estate:working', null, null, null, null, null, null, 0, 0, 0, 0]];
     }
     if (statement.includes('MATCH (h:EstateProjectionHead)')) {
       // Another estate's live head must survive a prune it did not ask for.
-      return [['estate-projection:sw-live'], ['estate-projection:host-runtime-live']];
+      return [['estate-projection:example-estate-live'], ['estate-projection:host-runtime-live']];
     }
-    if (statement.includes('MATCH (p:EstateProjection)')) return [['estate-projection:sw-old', 'superseded', '2026-01-01']];
+    if (statement.includes('MATCH (p:EstateProjection)')) return [['estate-projection:example-estate-old', 'superseded', '2026-01-01']];
     return [[0]];
   };
-  const held = await pruneEstateProjections({ client, retain_superseded: 0, estate: 'sw' });
+  const held = await pruneEstateProjections({ client, retain_superseded: 0, estate: 'example-estate' });
   const candidateQuery = statements.find(row => row.statement.includes('MATCH (p:EstateProjection)'));
   assert.deepEqual({
     estateScoped: candidateQuery.parameters.estate,
     protectsOtherEstateHead: candidateQuery.parameters.protected.includes('estate-projection:host-runtime-live'),
     pruned: held.pruned_projection_ids,
-    slots: [estateSlot('selected', 'sw'), estateSlot('working', null)],
+    slots: [estateSlot('selected', 'example-estate'), estateSlot('working', null)],
   }, {
-    estateScoped: 'sw',
+    estateScoped: 'example-estate',
     protectsOtherEstateHead: true,
-    pruned: ['estate-projection:sw-old'],
-    slots: ['sw:selected', 'working'],
+    pruned: ['estate-projection:example-estate-old'],
+    slots: ['example-estate:selected', 'working'],
   });
 });
 
@@ -598,9 +601,6 @@ test('a container that cannot be resolved is reported, and the fact still reache
 test('a claim map too large to hold is refused with directions, not a RangeError', async () => {
   const root = mkdtempSync(join(process.env.ASCRYBE_SCRATCH_DIR || tmpdir(), 'claimmap-'));
   try {
-    // Not actually 600MB: the guard reads the size, so a sparse file proves the branch without
-    // writing the bytes. A real estate's map is 644,632,920 against a 536,870,888 ceiling, so
-    // this path could never have worked and failed with nothing pointing at the sharded reader.
     const path = join(root, 'claim-evidence-map.json');
     writeFileSync(path, '{}');
     truncateSync(path, constants.MAX_STRING_LENGTH + 1);
@@ -610,4 +610,80 @@ test('a claim map too large to hold is refused with directions, not a RangeError
         && /--claim-map-shards/u.test(error.message)
         && error.detail.bytes > error.detail.ceiling);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('an extracted fact whose kind no node declares is counted and named, never skipped', () => {
+  const graph = codeGraph();
+  graph.extracted_facts = [
+    { kind: 'catalog_entry', repo: 'fixture', file: 'catalogs/checks.json', line: 1,
+      entry_key_path: 'fast', scalar_fields: { command: 'node test' }, content_digest: 'a'.repeat(64) },
+    { kind: 'unmodelled_observation', repo: 'fixture', file: 'src/app.js', line: 7 },
+    { kind: 'unmodelled_observation', repo: 'fixture', file: 'src/app.js', line: 9 },
+  ];
+  const projection = buildUnifiedEstateProjection({ claim_map: claimMap(), code_graph: graph });
+  assert.deepEqual(projection.counts.containment.unregistered_fact_kinds, { unmodelled_observation: 2 });
+  assert.equal(projection.nodes.filter(node => node.kind === 'CatalogEntry').length, 1);
+});
+
+test('the kinds literal-values and the reference extractors produce are declared', () => {
+  // Each of these ran, produced facts, and had them dropped: the extractor written to fix
+  // "the map records where symbols are, not what they evaluate to" was itself undone here.
+  for (const kind of ['literal_value', 'predicate_literal', 'throw_site', 'path_expression',
+    'reference', 'yaml_record']) {
+    assert.ok(EXTRACTED_FACT_KINDS[kind], `${kind} must declare a node kind`);
+  }
+});
+
+test('repeated literal paths project separately even when their source line matches', () => {
+  const graph = codeGraph();
+  const fact = { kind: 'literal_value', repo: 'fixture', file: 'lib/repeated-preferences.ts', line: 1,
+    name: 'preferences', entries: [
+      { key: 'tone', value_kind: 'null', value: 'null', line: 1 },
+      { key: 'tone', value_kind: 'null', value: 'null', line: 1 },
+      { key: 'title', value_kind: 'string', value: 'quiet', line: 1 },
+    ] };
+  graph.extracted_facts = [fact];
+  const projection = buildUnifiedEstateProjection({ claim_map: claimMap(), code_graph: graph });
+  const factNode = projection.nodes.find(node => node.kind === 'LiteralValue');
+  const addresses = addressLiteralLeaves(fact);
+  const leafById = new Map(projection.nodes.filter(node => node.kind === 'LiteralLeaf')
+    .map(node => [node.node_id, node]));
+  const leaves = addresses.map(address => leafById.get(literalLeafId(factNode.node_id, address)));
+  const declarationByTarget = new Map(projection.edges.filter(edge => edge.relation === 'declares_value')
+    .map(edge => [edge.to, edge]));
+  const declarations = addresses.map(address => declarationByTarget.get(literalLeafId(factNode.node_id, address)));
+  assert.deepEqual({
+    ids: leaves.map(node => node.node_id),
+    leaves: leaves.map(node => ({ key_path: node.properties.key_path,
+      occurrence: node.properties.key_path_occurrence, multiplicity: node.properties.key_path_multiplicity,
+      line: node.properties.line })),
+    declarations: declarations.map(edge => ({ from: edge.from, to: edge.to,
+      occurrence: edge.properties.key_path_occurrence, multiplicity: edge.properties.key_path_multiplicity })),
+    uniqueId: leaves.find(node => node.properties.key_path === 'preferences.title').node_id,
+  }, {
+    ids: addresses.map(address => literalLeafId(factNode.node_id, address)),
+    leaves: [
+      { key_path: 'preferences.tone', occurrence: 1, multiplicity: 2, line: 1 },
+      { key_path: 'preferences.tone', occurrence: 2, multiplicity: 2, line: 1 },
+      { key_path: 'preferences.title', occurrence: 1, multiplicity: 1, line: 1 },
+    ],
+    declarations: addresses.map(address => ({ from: factNode.node_id,
+      to: literalLeafId(factNode.node_id, address), occurrence: address.key_path_occurrence,
+      multiplicity: address.key_path_multiplicity })),
+    // A path that appears once still uses the pre-existing {factId, key_path} address.
+    uniqueId: literalLeafId(factNode.node_id, addresses[2]),
+  });
+});
+
+test('a huge value is searchable by its neighbours and retrievable in full', () => {
+  const huge = 'x'.repeat(20000);
+  const graph = codeGraph();
+  graph.extracted_facts = [{ kind: 'literal_value', repo: 'fixture', file: 'lib/big.ts', line: 1,
+    name: 'blob', entries: [{ key: 'payload', value_kind: 'string', value: huge, line: 2 }] }];
+  const projection = buildUnifiedEstateProjection({ claim_map: claimMap(), code_graph: graph });
+  const leaf = projection.nodes.find(node => node.kind === 'LiteralLeaf');
+  assert.ok(leaf, 'the leaf must be projected');
+  assert.ok(leaf.search_text.length <= 4096, `index key ${leaf.search_text.length} exceeds the limit`);
+  assert.equal(leaf.properties.value.length, 20000, 'the value itself must not be truncated');
+  assert.equal(leaf.properties.key_path, 'blob.payload');
 });

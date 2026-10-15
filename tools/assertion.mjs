@@ -1,36 +1,4 @@
 #!/usr/bin/env node
-// The assertion model: one structure for everything a document claims.
-//
-// Three trust axes were invented separately and never reconciled — `document_mode` (a property of
-// the SOURCE), `assertion: documented` versus observation (a property of the PRODUCER), and claim
-// `modality` descriptive/normative (a property of the CONTENT). They kept looking like competing
-// answers to "how far should a reader trust this", which is why nothing unified them. They are
-// orthogonal: a normative statement in a research note read from a drawn diagram has a value on
-// all three at once, and none of them substitutes for another.
-//
-// So the map has two levels, and only the second needs trust axes at all.
-//
-//   Level 1, OBSERVATIONS. Entities and relations a producer witnessed at an exact location. The
-//   witness is the warrant; there is nothing to qualify.
-//
-//   Level 2, ASSERTIONS about level 1. Every assertion carries a SUBJECT, a SOURCE, and a NATURE,
-//   and the adjudication frame follows from the nature.
-//
-// Two properties make this general where the one-offs were not:
-//
-//   A subject may be a RELATION. `TaskOrch -->|publishes| Envelope` asserts something about a
-//   relationship, not about either endpoint, and a model with only entity subjects has to either
-//   drop it or flatten it into two unrelated statements. It may also be another ASSERTION, which
-//   is what "this design supersedes that one" and "these two claims contradict" require — the
-//   claim-to-claim layer needs no new structure, only a subject that points at an assertion.
-//
-//   A subject may be UNRESOLVED. A diagram drawing `R1 --> U` is a real assertion by a real
-//   document about identifiers that ground to nothing yet; 78% of drawn identifiers in a measured
-//   corpus are diagram-local shorthand. The assertion is well-formed regardless, and grounding
-//   arrives later as a separate receipt-backed edge. It never rewrites the assertion: the verbatim
-//   identifier stays forever, so a reader can always see what was actually written and decide for
-//   itself whether to follow the resolution. An assertion that quietly became a different
-//   assertion when someone guessed at its endpoints would be unauditable.
 import { createHash } from 'node:crypto';
 import { stableStringify } from './lib.mjs';
 

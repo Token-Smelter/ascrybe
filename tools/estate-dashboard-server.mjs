@@ -36,42 +36,35 @@ function statusFor(error) {
   return 500;
 }
 
+// The read-only query surface of the normal graph, one fixed route per query. Shared so a host that embeds the graph application
+// exposes exactly these routes and no query proxy. Returns null for any other path.
+export async function routeGraphApi(queries, url) {
+  if (url.pathname === '/api/projection-status') return queries.projectionStatus();
+  if (url.pathname === '/api/stats') return queries.stats({ view: value(url, 'view') });
+  if (url.pathname === '/api/concepts') return queries.concepts({ view: value(url, 'view'), limit: value(url, 'limit') });
+  if (url.pathname === '/api/overview') return queries.overview({ view: value(url, 'view'), limit: value(url, 'limit') });
+  if (url.pathname === '/api/search') return queries.search({
+    view: value(url, 'view'), term: value(url, 'term'), limit: value(url, 'limit'),
+    kinds: (value(url, 'kinds') || '').split(',').filter(Boolean), kind_quota: value(url, 'kind_quota') ?? null });
+  if (url.pathname === '/api/node') return queries.node({
+    view: value(url, 'view'), id: value(url, 'id'), limit: value(url, 'limit'),
+    ...(value(url, 'expand') ? { expand: value(url, 'expand') } : {}), kind_quota: value(url, 'kind_quota') ?? null });
+  if (url.pathname === '/api/neighbors') return queries.neighbors({
+    view: value(url, 'view'), id: value(url, 'id'), relation: value(url, 'relation'), direction: value(url, 'direction'), limit: value(url, 'limit') });
+  if (url.pathname === '/api/path') return queries.path({ view: value(url, 'view'), from: value(url, 'from'), to: value(url, 'to'), depth: value(url, 'depth') });
+  if (url.pathname === '/api/provenance') return queries.provenance({ view: value(url, 'view'), id: value(url, 'id'), depth: value(url, 'depth'), limit: value(url, 'limit') });
+  return null;
+}
+export { statusFor as graphErrorStatus };
+
 export function createEstateDashboardServer({ queries, dashboard_root: dashboardRoot = DASHBOARD_ROOT }) {
   if (!(queries instanceof EstateGraphQueries)) throw new Error('dashboard server requires EstateGraphQueries');
   const root = resolve(dashboardRoot);
   return createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
-      if (url.pathname === '/api/projection-status') return json(res, await queries.projectionStatus());
-      if (url.pathname === '/api/stats') return json(res, await queries.stats({ view: value(url, 'view') }));
-      if (url.pathname === '/api/concepts') return json(res, await queries.concepts({
-        view: value(url, 'view'), limit: value(url, 'limit'),
-      }));
-      if (url.pathname === '/api/overview') return json(res, await queries.overview({
-        view: value(url, 'view'), limit: value(url, 'limit'),
-      }));
-      if (url.pathname === '/api/search') return json(res, await queries.search({
-        view: value(url, 'view'), term: value(url, 'term'), limit: value(url, 'limit'),
-        kinds: (value(url, 'kinds') || '').split(',').filter(Boolean),
-        kind_quota: value(url, 'kind_quota') ?? null,
-      }));
-      if (url.pathname === '/api/node') return json(res, await queries.node({
-        view: value(url, 'view'), id: value(url, 'id'), limit: value(url, 'limit'),
-        ...(value(url, 'expand') ? { expand: value(url, 'expand') } : {}),
-        kind_quota: value(url, 'kind_quota') ?? null,
-      }));
-      if (url.pathname === '/api/neighbors') return json(res, await queries.neighbors({
-        view: value(url, 'view'), id: value(url, 'id'), relation: value(url, 'relation'),
-        direction: value(url, 'direction'), limit: value(url, 'limit'),
-      }));
-      if (url.pathname === '/api/path') return json(res, await queries.path({
-        view: value(url, 'view'), from: value(url, 'from'), to: value(url, 'to'),
-        depth: value(url, 'depth'),
-      }));
-      if (url.pathname === '/api/provenance') return json(res, await queries.provenance({
-        view: value(url, 'view'), id: value(url, 'id'), depth: value(url, 'depth'),
-        limit: value(url, 'limit'),
-      }));
+      const routed = await routeGraphApi(queries, url);
+      if (routed) return json(res, routed);
       if (url.pathname.startsWith('/api/')) return json(res, {
         error: 'ESTATE_DASHBOARD_ROUTE_MISSING', message: 'unknown dashboard API route',
       }, 404);

@@ -136,9 +136,9 @@ test('manifest envelope ownership preserves the extractor direction', () => {
       record: { repo: 'app', file: 'plugins/subscriber/plugin.yaml', doc_name: 'subscriber' },
       mention: { mention_id: 'mention:subscriber-manifest' } },
     flowCandidate({ file: 'plugins/publisher/plugin.yaml', owner: 'publisher', index: 1,
-      source: 'publishes_envelopes:\n  - kind: work_order.accepted' }),
+      source: 'publishes_envelopes:\n  - kind: parcel_order.accepted' }),
     flowCandidate({ file: 'plugins/subscriber/plugin.yaml', owner: 'subscriber', index: 2,
-      source: 'subscribes_envelopes:\n  - kind: work_order.accepted' }),
+      source: 'subscribes_envelopes:\n  - kind: parcel_order.accepted' }),
   ];
   const held = buildCodeDependencyRelations({ merge_graph: { nodes: [], edges: [] },
     code_plane_head: codePlaneHead, identity_candidates: candidates });
@@ -187,7 +187,7 @@ test('a wildcard-expanded relation keeps its pattern so literal and derived flow
       from: 'module:app:src/a.js', to: 'module:app:src/b.js', witnesses: [{ file: 'src/a.js', line: 3 }] },
     { id: 'consumes:wildcard', kind: 'consumes', status: 'resolved',
       from: 'module:app:src/a.js', to: 'module:app:src/b.js',
-      resolution_kind: 'wildcard_subscription', match_pattern: 'brew.*',
+      resolution_kind: 'wildcard_subscription', match_pattern: 'batch.*',
       witnesses: [{ file: 'src/a.js', line: 9 }] },
   ] };
   const held = buildCodeDependencyRelations({
@@ -203,7 +203,7 @@ test('a wildcard-expanded relation keeps its pattern so literal and derived flow
     expanded: [expanded.resolution_kind, expanded.match_pattern],
     literalHasNone: 'resolution_kind' in literal,
     carried: walkable.find(row => row.edge_kind === 'consumes')?.match_pattern,
-  }, { expanded: ['wildcard_subscription', 'brew.*'], literalHasNone: false, carried: 'brew.*' });
+  }, { expanded: ['wildcard_subscription', 'batch.*'], literalHasNone: false, carried: 'batch.*' });
 });
 
 test('[falsifier: relation powerlessness] relation bytes carry no identity fields and mutating them cannot reach resolution', () => {

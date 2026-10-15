@@ -99,9 +99,6 @@ function sourceUnitSpans(block) {
     const properties = schemaPropertySpans(block.text);
     if (properties.length) return properties.map(span => ({ ...span, kind: 'schema_property' }));
   }
-  // Broad source-addressed units are additive. Retain the legacy sentence units so current A1
-  // claims can span a whole non-Markdown block or heading without changing the pinned proposition
-  // opportunity plane that measured V32 candidate behavior.
   if (!/\.mdx?$/iu.test(block.file)) return [
     { start: 0, end: block.text.length, kind: 'source_block' },
     ...sentenceSpans(block.text).map(span => ({ ...span, kind: 'sentence' })),

@@ -104,9 +104,6 @@ test('a kind that declares the commit still reaches the commit', () => {
 
 test('a document nobody claimed anything about still exists, and still holds its sections', async () => {
   const { buildUnifiedEstateProjection } = await import('../tools/estate-graph-projection.mjs');
-  // Withholding a document from the paid read is meant to skip extracting claims from it, not to
-  // erase it. Before this, a Document node was minted only from claims, so scope exclusions
-  // deleted 1,313 sections' containers and the projection reported them as document_absent.
   const claim = {
     schema: 'estate-map/claim-evidence-map/v1', digest: 'c'.repeat(64),
     project: { id: 'fixture', sha: '1'.repeat(40) },
@@ -150,10 +147,6 @@ test('a document nobody claimed anything about still exists, and still holds its
 
 test('the document address space is decided once from the graph, not guessed per fact', async () => {
   const { buildUnifiedEstateProjection } = await import('../tools/estate-graph-projection.mjs');
-  // A repository materialized beneath an estate gives every fact two candidate addresses that
-  // differ by the project directory. Choosing wrong mints a parallel set of Documents nothing
-  // references: a first attempt produced 2,308 Documents for 1,154 files and reported zero
-  // refusals, because the sections had attached to the orphans.
   const claim = {
     schema: 'estate-map/claim-evidence-map/v1', digest: 'c'.repeat(64),
     project: { id: 'fixture', sha: '1'.repeat(40) },

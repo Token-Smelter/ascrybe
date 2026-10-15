@@ -146,9 +146,6 @@ function scanSymbols(tree, ctx, facts) {
     if (!nameNode || !declNode) continue;
     const symbolKind = SYMBOL_KIND_BY_NODE_TYPE[declNode.type] || declNode.type;
     const { line, column } = pos(nameNode);
-    // Without this the identity candidate generator refuses every Python symbol as
-    // `declaration_scope_not_nameable`, which is how an estate of 4,772 Python modules produced a
-    // code plane of 140 symbols and left every documentary claim with nothing to bind to.
     const scopePath = scopePathFor(declNode, nameNode.text);
     facts.push(ctx.fact('symbol', line, { name: nameNode.text, symbol_kind: symbolKind, column,
       ...(scopePath ? { scope_path: scopePath } : {}) }));
