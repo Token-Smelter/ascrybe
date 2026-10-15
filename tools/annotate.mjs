@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from './readonly-guard.mjs';
 import path from 'node:path';
+import { loadEntityAnalysisConfig, normalizeDomainExclusionReceipt } from './entity-analysis-config.mjs';
 import { factKey, parseArgs, stableStringify } from './lib.mjs';
 import { buildPresentationRecords } from './presentation-records.mjs';
 import { ADJUDICATION_SCHEMA_VERSION, validateRecord } from './adjudication-schema.mjs';
@@ -87,7 +88,8 @@ export const REFUSAL_FILE_SUFFIX='.refusals.jsonl';
 // DOMAIN PREPASS RECEIPTS — one persisted decision for every node without a
 // documented-domain anchor. Assignment overlays are separate positive records;
 // these receipts retain the ambiguous/no-anchor alternatives views must expose.
-export const DOMAIN_PREPASS_SCHEMA='estate-map/domain-prepass-receipt/v1';
+export const DOMAIN_PREPASS_SCHEMA='estate-map/domain-prepass-receipt/v2';
+export const LEGACY_DOMAIN_PREPASS_SCHEMA='estate-map/domain-prepass-receipt/v1';
 export const DOMAIN_PREPASS_FILE_SUFFIX='.domain-prepass.jsonl';
 export const DOMAIN_PREPASS_STATUSES=Object.freeze(['assigned','ambiguous','no_anchor','ineligible_subject','fixture_only']);
 // no_anchor + the two @2 gate states (ineligible_subject, fixture_only) carry no adjacency candidates/evidence.
@@ -117,23 +119,7 @@ export const STRUCTURAL_UNCLASSIFIED_REASONS=Object.freeze([
   'no_structural_rule_for_component', // the node is positioned, but no rule covers its component
   'no_witness_to_position_the_node',  // the node carries no witness, so it cannot be positioned at all
 ]);
-// ---------------------------------------------------------------------------
-// ENTITY-LAYER RECORDS — the DOMAIN entities, their typed relationships, the envelope kinds
-// attached to them, and both halves of every cross-source disagreement.
-//
-// WHY A FOURTH RECORD FAMILY AND NOT graph.nodes. The entity layer is the only layer in this
-// toolkit whose subjects are NOT graph nodes: `entity:brew` is a thing the schema declares,
-// not a file the walker found. Minting 13 new `graph.nodes` entries for it would raise the
-// `undomained` queue by 13 (query.mjs#queueVector counts `graph.nodes` minus domained
-// subjects) and inflate every node-population statistic in the toolkit with records from a
-// different ontology. AC-NO-DRAIN forbids exactly that contamination, so the layer rides in
-// its own array of the same merged artifact — like refusals and structural-unclassified
-// records — and projection.mjs SYNTHESISES the ER view's nodes from it at render time.
-//
-// WHY ONE FAMILY WITH FIVE RECORD KINDS. All five are statements about the same subject
-// (an entity), they are produced together by one derivation, and a consumer that reads
-// entities without their refusals or conflicts would read a map that looks complete and is
-// not. `record_kind` discriminates; the validator holds each kind to its own exact fields.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 export const ENTITY_LAYER_SCHEMA='estate-map/entity-layer/v1';
 export const ENTITY_LAYER_FILE_SUFFIX='.entity-layer.jsonl';
 export const ENTITY_RECORD_KINDS=Object.freeze(['entity_type','relationship','envelope_attachment','capability_attachment','refusal','conflict']);
@@ -163,40 +149,7 @@ export const ENTITY_REFUSAL_REASONS=Object.freeze([
   'table_superseded_by_other_root_table',
   'table_names_no_promoted_entity',
 ]);
-// ---------------------------------------------------------------------------
-// INTERPRETATION-LAYER RECORDS — model inference over PROJECTIONS of the assembled graph,
-// carrying a SECOND, WEAKER evidentiary class that is labelled as such everywhere.
-//
-// THE WITNESS PROBLEM, STATED RATHER THAN SMUGGLED. Every node in this map is witnessed at a
-// real `file:line`: a demonstrative witness, a place you can open that EXHIBITS the fact. An
-// interpretation node cannot have one. It is not at a line — it is ABOUT A SET. So this family
-// carries `evidence_class: 'reproducible_slice_witness'` on EVERY record, and the witness it
-// carries is the projection/query spec that produced the slice + the exact member node ids +
-// the graph digest the spec was evaluated against. The check is mechanical and falsifiable:
-// re-run the spec against that digest and you must get the same members back
-// (interpretation-layer.mjs#reproduceSlice). It is NOT the same thing as `file:line` evidence
-// and the schema never lets it be read as such.
-//
-// WHY A FIFTH RECORD FAMILY AND NOT AN OVERLAY ANNOTATION. Three independent reasons, each of
-// which alone is disqualifying:
-//   1. `validateAnnotation` requires a NON-EMPTY `grounded_in` of `{repo,file,line}` witnesses.
-//      A slice witness has no line. Weakening that rule is exactly what l1-adjudication-spec.md
-//      §6.2 refuses to do — it is "the structural difference between an adjudication and a
-//      hallucination" — and satisfying it would mean SYNTHESISING a file:line for a set. Both
-//      options are worse than a separate family, so the family is separate.
-//   2. An overlay's `subject` is an EXISTING graph node. A concept node is a NEW subject; there
-//      is no node to annotate. This is the same problem the entity layer has and solves the
-//      same way (its subjects are entities the schema declares, not files the walker found).
-//   3. `BODY_FIELDS` bodies are flat strings. A slice witness is a spec object plus a member
-//      array plus a digest; it cannot be expressed as a body of scalars without lossy encoding.
-// The consequence is the honesty guarantee: minting concept graph nodes would raise the
-// `undomained` queue by their count and put model inferences into every extracted-node census.
-// These records are not nodes, carry no `body.domain`, and `projection.mjs` synthesises the
-// interpretation view from them at render time — the same discipline the entity layer used.
-//
-// WHY ONE FAMILY WITH FIVE RECORD KINDS. All five are the shape reader's output over one slice
-// enumeration and are produced together; a consumer that read concepts without their refusals
-// and unverifiable documented concepts would read a map that looks complete and is not.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 export const INTERPRETATION_LAYER_SCHEMA='estate-map/interpretation-layer/v1';
 export const INTERPRETATION_LAYER_FILE_SUFFIX='.interpretation-layer.jsonl';
 export const INTERPRETATION_RECORD_KINDS=Object.freeze(['concept','interpretation_relationship','doc_binding','unverifiable_doc_concept','refusal']);
@@ -246,27 +199,6 @@ const INTERPRETATION_RECORD_FIELDS=Object.freeze({
   unverifiable_doc_concept:['doc_source','doc_witness','documented_concept','evidence_class','examined','generated_at','id','model','producer','reason_detail','record_kind','rule','schema'],
   refusal:['evidence_class','examined','generated_at','id','kind','model','producer','reason','reason_detail','record_kind','rule','schema','slice_witness'],
 });
-// ---------------------------------------------------------------------------
-// DATAFLOW-LAYER RECORDS — the SIXTH record family. Guarded-assignment flow skeletons extracted
-// deterministically from the syntax tree, plus the claims a shape reader may make OVER them.
-//
-// WHY IT IS NOT THE INTERPRETATION FAMILY. That family's every record carries
-// `reproducible_slice_witness` — evidence ABOUT A SET, with no line to open. A flow skeleton is
-// the opposite: every element of it is at a real `file:line` with the verbatim source text, and a
-// checker re-reads the file. Collapsing the two would relabel demonstrative evidence as
-// distributional evidence, which is the exact confusion the interpretation family's header refuses
-// to allow in the other direction. So this family carries TWO evidence classes, pinned per record
-// kind, and the validator will not let a record wear the wrong one:
-//   `witnessed_guarded_assignment` — the deterministic half (skeletons + extraction refusals).
-//   `entailed_by_flow_skeleton`    — the model half (claims + claim refusals), whose evidence is
-//                                    NOT the source but the SKELETON, cited by id AND digest.
-//
-// WHY THE CLAIM CARRIES BOTH A SENTENCE AND TYPED ASSERTIONS. `interpretation-layer.mjs` measured
-// a 43.6% over-claim rate and named the mechanism: its gates checked evidence ITEMS and left the
-// prose SENTENCE ungated. Its own §4.3 named the fix — "a `claims[]` array of typed, checkable
-// assertions replacing free prose". This schema makes both mandatory and the layer's gate D6
-// checks one against the other, so a sentence cannot assert an exclusion the assertions do not
-// carry and an assertion cannot cite a guard the skeleton does not hold.
 export const DATAFLOW_LAYER_SCHEMA='estate-map/dataflow-layer/v1';
 export const DATAFLOW_LAYER_FILE_SUFFIX='.dataflow-layer.jsonl';
 export const DATAFLOW_RECORD_KINDS=Object.freeze(['flow_skeleton','flow_refusal','flow_claim','claim_refusal']);
@@ -471,7 +403,7 @@ const REFUSAL_RESOLUTION_FIELDS=['domain','kind','note','rule'];
  */
 export function validateDomainPrepassReceipt(record,label='domain_prepass'){
   exactFields(record,DOMAIN_PREPASS_FIELDS,label);
-  if(record.schema!==DOMAIN_PREPASS_SCHEMA)throw new Error(`${label}.schema must be ${DOMAIN_PREPASS_SCHEMA}`);
+  if(![DOMAIN_PREPASS_SCHEMA,LEGACY_DOMAIN_PREPASS_SCHEMA].includes(record.schema))throw new Error(`${label}.schema must be ${DOMAIN_PREPASS_SCHEMA} or ${LEGACY_DOMAIN_PREPASS_SCHEMA}`);
   for(const field of ['producer','rule_id','rule_version','subject','subject_kind','reason'])nonempty(record[field],`${label}.${field}`);
   if(!DOMAIN_PREPASS_STATUSES.includes(record.status))throw new Error(`${label}.status must be one of ${DOMAIN_PREPASS_STATUSES.join(', ')}`);
   isoUtc(record.generated_at,`${label}.generated_at`);
@@ -840,7 +772,7 @@ export function validateDataflowRecord(record,label='dataflow'){
   }
   return record;
 }
-export async function readDomainPrepassReceipts(file){return readJsonl(file,validateDomainPrepassReceipt,'domain_prepass');}
+export async function readDomainPrepassReceipts(file,{entityConfig=loadEntityAnalysisConfig()}={}){return readJsonl(file,(record,label)=>validateDomainPrepassReceipt(normalizeDomainExclusionReceipt(record,entityConfig),label),'domain_prepass');}
 export async function readEntityLayer(file){return readJsonl(file,validateEntityLayerRecord,'entity_layer');}
 export async function readInterpretationLayer(file){return readJsonl(file,validateInterpretationRecord,'interpretation');}
 export async function readDataflowLayer(file){return readJsonl(file,validateDataflowRecord,'dataflow');}
@@ -874,6 +806,7 @@ export const RECORD_FAMILY_BY_SCHEMA=Object.freeze({
   [INTERPRETATION_LAYER_SCHEMA]:{suffix:INTERPRETATION_LAYER_FILE_SUFFIX,array:'graph.interpretation_layer',producer:'interpretation-layer.mjs'},
   [DATAFLOW_LAYER_SCHEMA]:{suffix:DATAFLOW_LAYER_FILE_SUFFIX,array:'graph.dataflow_layer',producer:'dataflow-layer.mjs'},
   [DOMAIN_PREPASS_SCHEMA]:{suffix:DOMAIN_PREPASS_FILE_SUFFIX,array:'graph.domain_prepass_receipts',producer:'domain-prepass.mjs'},
+  [LEGACY_DOMAIN_PREPASS_SCHEMA]:{suffix:DOMAIN_PREPASS_FILE_SUFFIX,array:'graph.domain_prepass_receipts',producer:'domain-prepass.mjs'},
   [ADJUDICATION_SCHEMA_VERSION]:{suffix:ADJUDICATION_RECORDS_FILE_SUFFIX,array:'graph.adjudication_records',producer:'l1-adjudicate.mjs'},
 });
 /** The record family a misrouted overlay file really holds, or null if it is not one. */

@@ -1,44 +1,12 @@
 #!/usr/bin/env node
-// ENTITY DISCOVERY for the Ascrybe: mine the codebase's own signals for the
-// entity types that ACTUALLY exist, reconcile them against the documented
-// ontology (design/canon/ontology.md), and report the difference.
-//
-// WHY: the canon formally catalogues ~26 entity types while the estate graph
-// models only file/deployment artifacts -- the intersection is EMPTY. And the
-// canon is provably stale: typed-ID prefixes minted in real code name entity
-// types that appear nowhere in it. The map must be a SUPERSET of the canon:
-// anything real is captured from reality regardless of whether anyone
-// remembered to document it, so canon staleness becomes a computable diff
-// instead of a vibe.
-//
-// THIS IS A DISCOVERY TOOL, NOT A GRAPH MUTATION. v1 output is a report
-// (JSON + markdown). It writes no graph nodes, does not touch merge.mjs, the
-// extractors, or the renderer, and NEVER edits the canon it measures against
-// (the +N queue drives HUMAN canon updates).
-//
-// CONTRACT (same as every estate-map tool): read-only, offline, deterministic,
-// never executes or imports scanned code (files are read as TEXT and matched
-// with regexes), respects the shared scan-scope exclusions from lib.mjs.
-//
-// EVIDENCE DISCIPLINE -- the two failure modes this tool exists to avoid, both
-// encountered live on a hand-rolled grep census:
-//   (a) a NARROW regex silently missed real envelope kinds (`.v1` suffixes,
-//       backtick quoting);
-//   (b) a BROAD regex admitted hundreds of hits of property-path junk
-//       (params.x, payload.y, ctx.z).
-// Neither string-shape approach is sound. So a dotted literal counts as an
-// envelope kind ONLY when it is (i) a COMPLETE quoted string literal -- which
-// structurally excludes unquoted property paths -- AND (ii) demonstrably
-// anchored to bus machinery: an emit-like call argument, a `kind:` field inside
-// an envelope literal, or a subscription/filter registration. Every candidate
-// carries file:line witnesses pointing at its real anchor site, and the anchor
-// reason is recorded so a human can audit why the hit was admitted.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 import fs from './readonly-guard.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, walk, normalizePath, stableStringify } from './lib.mjs';
 import { defaultOutputRoot, registerScanRoot } from './readonly-guard.mjs';
 import { readOptionalEstateInput } from './portability.mjs';
+import { loadEntityAnalysisConfig, validateEntityAnalysisConfig, unconfiguredEntityAnalysis } from './entity-analysis-config.mjs';
 
 export const TOOL_ID = 'discover-entities';
 
@@ -69,10 +37,8 @@ export const NOISE_ROOTS = Object.freeze(new Set([
   'body', 'data', 'result', 'value', 'obj', 'object', 'config', 'env', 'error', 'err', 'e', 'it',
   'row', 'item', 'entry', 'node', 'json', 'string', 'number', 'boolean', 'array', 'promise', 'math',
 ]));
-// DELIBERATELY TINY. Every entry is an abbreviation observed minting ids in THIS
-// codebase, and an entry alone never merges anything: the abbreviation cluster
-// and the expansion cluster must additionally share a witness context (§merge).
-export const ABBREVIATIONS = Object.freeze({ wo: 'work_order', bsub: 'brew_subscription' });
+// Aliases require both an estate declaration and shared source witnesses.
+export const ABBREVIATIONS = Object.freeze({});
 export const IRREGULAR_SINGULARS = Object.freeze({
   criteria: 'criterion', indices: 'index', matrices: 'matrix', vertices: 'vertex', people: 'person',
   children: 'child', data: 'data', metadata: 'metadata', schema: 'schema', media: 'media', status: 'status',
@@ -80,20 +46,7 @@ export const IRREGULAR_SINGULARS = Object.freeze({
 export const MAX_WITNESSES_PER_CLASS = 8;
 export const MIN_CANON_ENTITIES = 20;
 export const CONFIDENCE_LABELS = Object.freeze({ 1: 'weak', 2: 'moderate', 3: 'high', 4: 'maximal' });
-// Sanity list from the operator's in-session census. These are VERIFIED, never
-// assumed: a miss is reported as a probable extractor bug, and a documented
-// entity the census called undocumented is reported as a census error. The tool
-// states what the source says; the source always wins.
-export const EXPECTED_FINDINGS = Object.freeze([
-  { entity: 'artifact', expected: 'discovered_undocumented' },
-  { entity: 'environment', expected: 'discovered_undocumented' },
-  { entity: 'criterion', expected: 'discovered_undocumented' },
-  { entity: 'ward', expected: 'discovered_undocumented' },
-  { entity: 'lease', expected: 'discovered_undocumented' },
-  { entity: 'initiative', expected: 'discovered_undocumented' },
-  { entity: 'brew_subscription', expected: 'discovered_undocumented', aliases: ['bsub'] },
-  { entity: 'work_order', expected: 'matched', min_signature_classes: 4, aliases: ['wo'] },
-]);
+export const EXPECTED_FINDINGS = Object.freeze([]);
 
 const HELP = `Usage:
   node tools/estate-map/discover-entities.mjs [estate-root] [options]
@@ -142,7 +95,7 @@ export function normalizeEntityName(raw) {
   return tokens.join('_');
 }
 
-export const expandAbbreviation = normalized => ABBREVIATIONS[normalized] || null;
+export const expandAbbreviation = (normalized, abbreviations = ABBREVIATIONS) => Object.hasOwn(abbreviations, normalized) ? abbreviations[normalized] : null;
 const contextOf = file => normalizePath(file).split('/').slice(0, 2).join('/');
 const trimEvidence = line => String(line).trim().replace(/\s+/g, ' ').slice(0, 160);
 export const isTestPath = relativePath => TEST_PATH_PATTERNS.some(pattern => pattern.test(normalizePath(relativePath)));
@@ -397,18 +350,8 @@ function absorb(cluster, signal) {
   for (const field of signal.detail?.fields || []) cluster.fields.add(field);
 }
 
-/**
- * Cluster candidates across signature classes.
- *
- * Merging is CONSERVATIVE by construction: identical normalized names merge
- * (deterministic normalization, not similarity), and an abbreviation merges into
- * its expansion ONLY when the two candidate sets share a witness context (same
- * component subtree -- e.g. a `wo-` mint site and a `work_order.*` emission both
- * under plugins/task-orchestration). Name similarity alone NEVER merges; an
- * abbreviation whose expansion is observed elsewhere with no shared context is
- * reported as an AMBIGUOUS merge and the clusters stay separate.
- */
-export function clusterSignals(signals) {
+/** Resolve only witnessed evidence; unresolved candidates remain explicit. */
+export function clusterSignals(signals, { abbreviations = ABBREVIATIONS } = {}) {
   const clusters = new Map();
   for (const signal of [...signals].sort(witnessSort)) {
     if (!clusters.has(signal.normalized)) clusters.set(signal.normalized, makeCluster(signal.normalized));
@@ -417,7 +360,7 @@ export function clusterSignals(signals) {
 
   const ambiguous = [];
   for (const name of [...clusters.keys()].sort()) {
-    const expansion = expandAbbreviation(name);
+    const expansion = expandAbbreviation(name, abbreviations);
     if (!expansion) continue;
     const source = clusters.get(name);
     const target = clusters.get(expansion);
@@ -579,7 +522,7 @@ function nearMissClusters(canonNormalized, clusters) {
     .map(cluster => ({ entity: cluster.entity, confidence: cluster.confidence, merge_not_performed: 'token-subset overlap only; no shared witness context justified a merge' }));
 }
 
-export function reconcile(clusters, canon, { adjudicatedDead = [] } = {}) {
+export function reconcile(clusters, canon, { adjudicatedDead = [], abbreviations = ABBREVIATIONS } = {}) {
   const canonByNormalized = new Map(canon.entities.map(entity => [entity.normalized, entity]));
   const nonEntityByNormalized = new Map(canon.non_entities.map(entity => [entity.normalized, entity]));
   const dead = new Set(adjudicatedDead.map(normalizeEntityName).filter(Boolean));
@@ -588,7 +531,7 @@ export function reconcile(clusters, canon, { adjudicatedDead = [] } = {}) {
   const discoveredUndocumented = [];
 
   for (const cluster of clusters) {
-    const keys = [cluster.entity, ...cluster.aliases.map(normalizeEntityName), ...cluster.aliases.map(alias => normalizeEntityName(expandAbbreviation(normalizeEntityName(alias)) || ''))].filter(Boolean);
+    const keys = [cluster.entity, ...cluster.aliases.map(normalizeEntityName), ...cluster.aliases.map(alias => normalizeEntityName(expandAbbreviation(normalizeEntityName(alias), abbreviations) || ''))].filter(Boolean);
     const hit = keys.map(key => canonByNormalized.get(key)).find(Boolean);
     const row = {
       entity: cluster.entity, aliases: cluster.aliases, confidence: cluster.confidence,
@@ -630,7 +573,7 @@ export function reconcile(clusters, canon, { adjudicatedDead = [] } = {}) {
   };
 }
 
-function evaluateExpectations(clusters, reconciliation) {
+function evaluateExpectations(clusters, reconciliation, expectedFindings = EXPECTED_FINDINGS) {
   const byName = new Map();
   for (const cluster of clusters) {
     byName.set(cluster.entity, cluster);
@@ -642,7 +585,7 @@ function evaluateExpectations(clusters, reconciliation) {
     }
     return reconciliation.documented_unwitnessed.some(row => row.entity === entity) ? 'documented_unwitnessed' : 'not_found';
   };
-  return EXPECTED_FINDINGS.map(expectation => {
+  return expectedFindings.map(expectation => {
     const cluster = byName.get(expectation.entity) ||
       (expectation.aliases || []).map(alias => byName.get(normalizeEntityName(alias))).find(Boolean);
     const observed = cluster ? classificationOf(cluster.entity) : classificationOf(expectation.entity);
@@ -666,7 +609,7 @@ function evaluateExpectations(clusters, reconciliation) {
 
 /* ------------------------------------------------------------- reporting --- */
 
-export function buildReport({ clusters, ambiguous_merges, canon, reconciliation, scan, generatedAt = DEFAULT_GENERATED_AT }) {
+export function buildReport({ clusters, ambiguous_merges, canon, reconciliation, scan, generatedAt = DEFAULT_GENERATED_AT, entityConfig = null }) {
   const headline = {
     discovered_entity_types: clusters.length,
     documented_entity_types: canon.entities.length,
@@ -692,7 +635,8 @@ export function buildReport({ clusters, ambiguous_merges, canon, reconciliation,
     },
     reconciliation,
     ambiguous_merges,
-    expectations: evaluateExpectations(clusters, reconciliation),
+    expectations: evaluateExpectations(clusters, reconciliation, entityConfig?.expected_findings ?? EXPECTED_FINDINGS),
+    ...(entityConfig ? {} : { configuration_dispositions: unconfiguredEntityAnalysis(['abbreviation_expansion', 'expected_discovery']) }),
     clusters,
   };
 }
@@ -779,7 +723,7 @@ export function renderMarkdown(report) {
     out.push('');
     if (corroborated.length) table(corroborated); else out.push('_None._');
     out.push('');
-    out.push(`**Weak (single signature class): ${weak.length}.** Real anchored witnesses, but only one class attests — includes genuine aggregates (\`environment\`, \`lease\`), projections/read models (\`*_summary\`, \`work_explorer_*\`), and transient message-id schemes (\`ready-\`, \`drained-\`). Triage before promoting to canon.`);
+    out.push(`**Weak (single signature class): ${weak.length}.** Real anchored witnesses, but only one class attests. Distinguish persistent entities, projections, and transient identifiers before promoting to canon.`);
     out.push('');
     if (weak.length) table(weak); else out.push('_None._');
     const notes = rows.filter(row => row.canon_note);
@@ -855,21 +799,11 @@ export function renderMarkdown(report) {
 
 /* ------------------------------------------------------------------ main --- */
 
-export async function discoverEntities({ estateRoot, canonPath, includeTests = false, adjudicatedDead = [], generatedAt = DEFAULT_GENERATED_AT } = {}) {
+export async function discoverEntities({ estateRoot, canonPath, includeTests = false, adjudicatedDead = [], generatedAt = DEFAULT_GENERATED_AT, entityConfig = null } = {}) {
+  entityConfig = validateEntityAnalysisConfig(entityConfig);
   const root = path.resolve(estateRoot || process.cwd());
   const resolvedCanon = canonPath ? path.resolve(canonPath) : path.join(root, DEFAULT_CANON_RELATIVE);
-  // Canon FIRST: a structural DRIFT (canon present but malformed) must still abort before
-  // any output is produced. An ABSENT canon is a different thing: it means this estate does
-  // not document an ontology at all, which is the normal case for every estate but the one
-  // this tool was written for. Absence degrades to "no documented entities" plus a durable
-  // refusal record; it must not kill the run with an ENOENT stack trace (which also took
-  // loop-driver's whole iteration down with it).
-  //
-  // The typed record is produced by portability.mjs, which is the conservation gates'
-  // derivability vocabulary (conservation.mjs) applied to "was this input present at
-  // all?". Absence -> SCOPE/input_absent; present-but-unreadable -> SCOPE/input_unreadable;
-  // present-but-unparseable -> BUG/input_malformed, which is NOT smoothed into absence
-  // because a broken parse manufactures false "undocumented" findings.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const canonRead = await readOptionalEstateInput(resolvedCanon, {
     tool: TOOL_ID,
     estateRoot: root,
@@ -917,8 +851,8 @@ export async function discoverEntities({ estateRoot, canonPath, includeTests = f
   const signals = [];
   for (const file of [...texts.keys()].sort()) signals.push(...scanFileForSignals(file, texts.get(file), { memberSegments }));
 
-  const { clusters, ambiguous_merges } = clusterSignals(signals);
-  const reconciliation = reconcile(clusters, canon, { adjudicatedDead });
+  const { clusters, ambiguous_merges } = clusterSignals(signals, { abbreviations: entityConfig?.abbreviations });
+  const reconciliation = reconcile(clusters, canon, { adjudicatedDead, abbreviations: entityConfig?.abbreviations });
   const scan = {
     estate_root_basename: path.basename(root),
     files_scanned: texts.size,
@@ -928,7 +862,7 @@ export async function discoverEntities({ estateRoot, canonPath, includeTests = f
     include_tests: includeTests,
     scope_exclusion_counts: walked.scopeExclusions.counts,
   };
-  return { ...buildReport({ clusters, ambiguous_merges, canon, reconciliation, scan, generatedAt }), portability: portabilityRecords };
+  return { ...buildReport({ clusters, ambiguous_merges, canon, reconciliation, scan, generatedAt, entityConfig }), portability: portabilityRecords };
 }
 
 export async function writeDiscoveryReport(report, outDir) {
@@ -950,15 +884,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const adjudicatedDead = options.dead ? JSON.parse(await fs.readFile(path.resolve(options.dead), 'utf8')) : [];
     const report = await discoverEntities({
       estateRoot: root,
+      entityConfig: loadEntityAnalysisConfig(options['runtime-config']),
       canonPath: options.canon ? path.resolve(options.canon) : undefined,
       includeTests: Boolean(options['include-tests']),
       adjudicatedDead,
       generatedAt: options['generated-at'],
     });
-    // The default MUST NOT be `<root>/.estate-map/...`. That default is how
-    // A neighbouring estate acquired an .estate-map/ directory (32 MB map.html,
-    // OPERATION-LOG.md, a whole prior run's graph) before anyone noticed the tool was
-    // writing into an estate it was only supposed to read.
     const outDir = options.out ? path.resolve(options.out) : defaultOutputRoot(root, 'entity-discovery');
     const written = await writeDiscoveryReport(report, outDir);
     if (options.json) { console.log(stableStringify(report)); process.exit(0); }
@@ -970,6 +901,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (failures.length) {
       console.log('Census expectation self-check flagged:');
       for (const failure of failures) console.log(`  ${failure.entity}: expected ${failure.expected}, observed ${failure.observed} -- ${failure.note}`);
-    } else console.log('Census expectation self-check: all expectations satisfied.');
+    } else console.log(report.configuration_dispositions?.length ? 'Census expectation self-check: skipped (entity_analysis_unconfigured).' : 'Census expectation self-check: all configured expectations satisfied.');
   } catch (error) { console.error(error.message); process.exit(1); }
 }
