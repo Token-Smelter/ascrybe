@@ -10,7 +10,7 @@ import {
 import { groundedAssertionId } from '../tools/serving-assertions.mjs';
 import { sha256, stableStringify } from '../tools/lib.mjs';
 
-const sourceHead = '90ec8527ca8fa5957dc52e91d25414ff5980e1fd';
+const sourceHead = 'a'.repeat(40);
 const manifest = {
   corpus_manifest_digest: 'corpus:fixture',
   // Completeness is the gate, so the fixture mirrors whatever the registry currently registers
@@ -37,7 +37,8 @@ function fixture(facts) {
       merge_graph: mergeGraph,
       merge_graph_digest: sha256(stableStringify(mergeGraph)),
       source_head: sourceHead,
-      recorded_time: '2026-08-02T11:19:50-07:00',
+      required_source_head: sourceHead,
+      recorded_time: '2000-01-01T00:00:00Z',
     }),
   };
 }

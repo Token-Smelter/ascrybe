@@ -14,7 +14,6 @@ import { buildExtractionCacheBinding, materializeExtractionCache } from './extra
 import {
   identityCandidateDecisions, identityCandidateGenerationReport,
 } from './identity-candidate-generator.mjs';
-import { estateRoot } from './phase-a-exit-gate.mjs';
 import {
   groundedAssertionId, GROUNDED_ASSERTION_SCHEMA, GROUNDED_ASSERTION_SCHEMA_VERSION,
 } from './serving-assertions.mjs';
@@ -28,7 +27,6 @@ export const CODE_FACT_SCHEMA = 'estate-map/extracted-code-fact/v1';
 const canonical = value => stableStringify(value).trim();
 const hashId = (prefix, value) => `${prefix}:${sha256(canonical(value))}`;
 const compare = (left, right) => left.localeCompare(right);
-const expectedEstateHead = '90ec8527ca8fa5957dc52e91d25414ff5980e1fd';
 
 function fail(message) { throw new Error(message); }
 
@@ -117,8 +115,9 @@ function projectionReceipt({ fact, codePlaneHead, sourceHead, assertion, evidenc
 /** Adapt an exact runtime fact stream. No fact kind is inferred from a report or fixture. */
 export function buildCodeGroundedAssertions({
   facts_dir, extract_manifest, merge_graph, merge_graph_digest, source_head, recorded_time,
-  required_source_head: requiredSourceHead = expectedEstateHead,
+  required_source_head: requiredSourceHead,
 }) {
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(requiredSourceHead ?? '')) fail('SOURCE_PIN_REQUIRED: declare required_source_head');
   if (source_head !== requiredSourceHead) fail(`C4 requires declared source head ${requiredSourceHead}`);
   // The gate is completeness, not a particular count: every registered extractor must have been
   // available and none excluded. Hardcoding the number turned adding an extractor into a failing
@@ -273,11 +272,11 @@ export function buildCodeGroundedAssertions({
 }
 
 /** Run extract + merge against the pinned estate into managed scratch, then adapt exact facts. */
-export function producePinnedCodeGroundedAssertions() {
-  const estate = estateRoot();
+export function producePinnedCodeGroundedAssertions({ estate, required_source_head: requiredSourceHead } = {}) {
+  if (!estate || !/^[0-9a-f]{40}$/u.test(requiredSourceHead ?? '')) fail('SOURCE_PIN_REQUIRED: declare estate and required_source_head');
   const sourceHead = execFileSync('git', ['-C', estate, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const status = execFileSync('git', ['-C', estate, 'status', '--short'], { encoding: 'utf8' }).trim();
-  if (sourceHead !== expectedEstateHead || status) fail('pinned estate checkout is unavailable or dirty');
+  if (sourceHead !== requiredSourceHead || status) fail('pinned estate checkout is unavailable or dirty');
   const recordedTime = execFileSync('git', ['-C', estate, 'show', '-s', '--format=%cI', sourceHead], { encoding: 'utf8' }).trim();
   const scratch = scratchRoot();
   const binding = buildExtractionCacheBinding(sourceHead);
@@ -309,6 +308,7 @@ export function producePinnedCodeGroundedAssertions() {
     merge_graph: JSON.parse(readFileSync(join(mergeRoot, 'estate-graph.json'), 'utf8')),
     merge_graph_digest: readFileSync(graphDigestPath, 'utf8').trim(),
     source_head: sourceHead,
+    required_source_head: requiredSourceHead,
     recorded_time: recordedTime,
   });
 }

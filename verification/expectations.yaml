@@ -3,5 +3,6 @@ required_check_ids:
   - build
   - lint
   - tests
-  - full-tests
+  - identity-candidate-census
+  - design-authority
   - artifact-hygiene
