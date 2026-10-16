@@ -1,7 +1,8 @@
 // Import only screened regular files into private Git custody; never stage through the source's index.
 import { execFileSync } from 'node:child_process';
 import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { isWithin } from './path-within.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { artifactRoot } from './artifact-state.mjs';
@@ -10,7 +11,7 @@ import { screenUnit } from './ontology/estate-discovery.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const refuse = message => { throw new Error(`SNAPSHOT_REFUSED: ${message}`); };
-const inside = (child, parent) => { const r = relative(parent, child); return r === '' || (!r.startsWith('..') && !r.startsWith('/')); };
+const inside = (child, parent) => isWithin(parent, child);
 const fixedIdentity = { GIT_AUTHOR_NAME: 'Snapshot importer', GIT_AUTHOR_EMAIL: 'snapshot@example.invalid', GIT_COMMITTER_NAME: 'Snapshot importer', GIT_COMMITTER_EMAIL: 'snapshot@example.invalid', GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z', GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z' };
 
 export function snapshotSource({ root, id, authorizedRoots = [], stateRoot = artifactRoot({ repository }), forceGit = false, beforeConsistencyCheck = () => {} }) {

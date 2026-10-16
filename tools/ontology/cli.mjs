@@ -9,8 +9,9 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, resolve, relative, isAbsolute } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isWithin } from '../path-within.mjs';
 import { buildOntologyGeneration } from './generation-builder.mjs';
 import { stageInterpretation, promoteInterpretation } from './sidecar-store.mjs';
 import { OntologyQueries, ontologyQuerySurfaceContract } from './ontology-query.mjs';
@@ -151,8 +152,7 @@ async function runQuery(options, positionals) {
 const CODE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 function externalOutput(path) {
   const target = resolve(path);
-  const inside = relative(CODE_ROOT, target);
-  if (!inside || (!inside.startsWith('..') && !isAbsolute(inside))) {
+  if (isWithin(CODE_ROOT, target)) {
     throw Object.assign(new Error('classification artifacts must be written outside the public repository'),
       { code: 'CLASSIFICATION_OUTPUT_NOT_PRIVATE' });
   }

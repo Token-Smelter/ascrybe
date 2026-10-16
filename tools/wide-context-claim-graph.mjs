@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { segmentCorpus } from './wide-context-windows.mjs';
 import { sha256, stableStringify } from './lib.mjs';
+import { isWithin } from './path-within.mjs';
 import { markupNormalized } from './claim-v32.mjs';
 import { renderContextMapHtml } from './context-map-artifacts.mjs';
 
@@ -449,8 +450,7 @@ async function main() {
   const windows = reconstructWindowCatalog({ extraction, documents });
   const graph = buildClaimSourceGraph({ extraction, windows, documents });
   const output = path.resolve(options.output);
-  const relativeToEstate = path.relative(estate, output);
-  if (relativeToEstate === '' || (!relativeToEstate.startsWith('..') && !path.isAbsolute(relativeToEstate))) {
+  if (isWithin(estate, output)) {
     throw new ClaimSourceGraphError('READ_ONLY_ESTATE', 'graph output must be outside the estate checkout', { output });
   }
   await fs.mkdir(path.dirname(output), { recursive: true });
@@ -460,8 +460,7 @@ async function main() {
   let html = null;
   if (options.html) {
     html = path.resolve(options.html);
-    const htmlRelativeToEstate = path.relative(estate, html);
-    if (htmlRelativeToEstate === '' || (!htmlRelativeToEstate.startsWith('..') && !path.isAbsolute(htmlRelativeToEstate))) {
+    if (isWithin(estate, html)) {
       throw new ClaimSourceGraphError('READ_ONLY_ESTATE', 'graph HTML output must be outside the estate checkout', { output: html });
     }
     await fs.mkdir(path.dirname(html), { recursive: true });
