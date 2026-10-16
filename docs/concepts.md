@@ -78,10 +78,8 @@ could contradict. Ascrybe uses it to decide what is worth paying a model to read
 
 A refusal is a recorded outcome, never a silent absence. When a container cannot be resolved, a
 quote cannot be re-found in its window, or a reference grounds to nothing, the graph records the
-refusal and its reason rather than dropping the row. Two defects in this repository's own history
-came from silent fallbacks: 320 assertions lost their document edge without anything counting
-them, and 23,206 documentary facts attached to a commit because the code had nowhere to say they
-had a real parent.
+refusal and its reason rather than dropping the row. A missing document edge must be counted,
+not hidden by attaching an orphaned fact to an ambient commit node.
 
 The rule this produced: **an omission must fail, not default.** Where something must be declared,
 not declaring it is an error rather than a quiet fallback to whatever seems reasonable.

@@ -1,52 +1,6 @@
-// EMBEDDED-SQLITE-DDL extractor.
-//
-// WHY A SECOND SQL EXTRACTOR EXISTS. `extractors/sql.mjs` matches `filePattern:
-// /\.sql$/i` and emits one `sql_object` fact per `CREATE TABLE/VIEW`. This estate
-// has ZERO `.sql` files: every table is created from a template literal inside a
-// `.mjs` module (`src/substrate/db.mjs:13`, `plugins/recipe-engine/server/
-// index.mjs:6263`, `plugins/task-intents/server/schema.mjs:43`, …). So the shipped
-// SQL extractor finds none of this estate's schema, and the schema is the strongest
-// available evidence for what the platform's ENTITIES are and how they relate.
-//
-// This extractor reads the DDL where it really lives, and it reads DDL ONLY —
-// `CREATE TABLE` statements and their column/constraint lines. It never opens a
-// `.db`/`.sqlite` file, never issues a query, and never sees a row. That is a
-// property of the implementation (line-oriented text scan over source files), not
-// a promise: there is no database handle in this module.
-//
-// FACT KINDS (all witnessed at the real line):
-//   sqlite_table      one per `CREATE TABLE [IF NOT EXISTS] <name> (`, carrying the
-//                     declared primary key columns and the count of columns parsed.
-//   sqlite_ref        one per DECLARED foreign key — either the column-level
-//                     `<col> … REFERENCES <table>(<col>)` form
-//                     (plugins/recipe-engine/server/index.mjs:6293) or the
-//                     table-level `FOREIGN KEY (<col>) REFERENCES <table>(<col>)`
-//                     form (plugins/episodic-memory/server/index.mjs:108).
-//   sqlite_id_column  one per FK-SHAPED column that declares NO reference: a
-//                     column whose name ends `_id` (or is exactly `id`). The
-//                     TARGET is deliberately NOT resolved here — a per-file scan
-//                     cannot see other files' tables, and guessing a target from a
-//                     name inside one file is how a wrong witness gets minted.
-//                     Resolution against the estate-wide table set happens in
-//                     entity-layer.mjs, which can cite both ends.
-//
-// Every fact carries `unique_column` / `primary_key_column`, because that single
-// bit is what separates `has_one` from `has_many` when the ER layer annotates
-// cardinality: a plain FK column admits many child rows per parent, a UNIQUE or
-// PRIMARY KEY column admits exactly one.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
-// PORTABILITY (semantic-portability-report-2026-07-27.md §F1). `CREATE TABLE` is
-// the same eleven characters in every language that embeds SQL, but this pattern
-// used to accept only the SQLite/JS spellings this estate writes. Three real
-// spellings on other estates did not match and produced ZERO tables where the DDL
-// was sitting in plain sight:
-//   * `CREATE OR REPLACE TABLE`  — BigQuery migrations, e.g.
-//     <estate>/<component>/bigquery/migrations/
-//     0001_create_raw_revenue_tables.sql
-//   * a QUALIFIED name `dataset.table` / `project.dataset.table` — same files;
-//     the old alternation stopped at the first `.` and then failed on `\s*\(`.
-//   * `CREATE TEMP TABLE` / `CREATE TEMPORARY TABLE`.
-// The identifier alternation now admits dotted qualifiers in every quoting style.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 const CREATE_TABLE = /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?((?:[A-Za-z_][\w$]*|"[^"]+"|`[^`]+`|\[[^\]]+\])(?:\.(?:[A-Za-z_][\w$]*|"[^"]+"|`[^`]+`|\[[^\]]+\]))*)\s*\(/i;
 // A qualified name's LAST segment is the table; the leading segments are the
 // dataset/schema/project. Split rather than slugged, so `revenue.charges` and
@@ -54,9 +8,9 @@ const CREATE_TABLE = /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE
 // entity layer (which keys on the table's own name) sees `charges` in both.
 //
 // BOTH real quoting shapes have to survive this, and they nest differently:
-//   `` `sleepworlds.revenue.app_store_connect_sales_raw` ``  — ONE quoted span
+//   `` `orchardlabs.revenue.storefront_sales_raw` ``  — ONE quoted span
 //       holding the dots (BigQuery's usual spelling), and
-//   `sleepworlds_analytics.gold_asset_registry`              — unquoted.
+//   `orchardlabs_analytics.gold_asset_registry`              — unquoted.
 // So the outer quoting is stripped FIRST and the dots are split AFTER; splitting
 // first left the backticked form as a single 47-character "table name".
 const splitQualifiedName = raw => unquote(String(raw).trim())
@@ -73,25 +27,10 @@ const TABLE_FOREIGN_KEY = /\bFOREIGN\s+KEY\s*\(\s*([^)]+?)\s*\)\s*(?:--.*)?$/i;
 const TABLE_PRIMARY_KEY = /^\s*PRIMARY\s+KEY\s*\(\s*([^)]+?)\s*\)/i;
 const TABLE_UNIQUE = /^\s*UNIQUE\s*\(\s*([^)]+?)\s*\)/i;
 const ID_COLUMN = /^(?:id|[\w$]+_id)$/i;
-// `CHECK (<col> IN ('a','b'))` is the only place this estate's schema ENUMERATES what a
-// polymorphic id column may point at (plugins/task-intents/server/schema.mjs:236 lists
-// 'intent','work_order','brew','criterion' for initiative_membership.item_kind). Without it,
-// `item_id` is an unresolvable reference; with it, the membership fan-out is a schema fact.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 const CHECK_IN = /\bCHECK\s*\(\s*([A-Za-z_][\w$]*)\s+IN\s*\(([^)]*)\)/i;
-// A `--` line comment, and a `/* */`-free approximation of it. DDL in this estate
-// documents itself heavily (plugins/recipe-engine/server/index.mjs:6328-6334); a
-// comment that mentions `REFERENCES brews(brew_id)` is prose, not a constraint.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 const stripComment = line => line.replace(/--.*$/, '');
-// A JS comment is PROSE ABOUT the DDL, not DDL. Skipping comment lines is load-bearing, not
-// cosmetic, and this is not a hypothetical: the first real-corpus run of this extractor
-// promoted an entity called `x` whose only witness was THIS FILE's own explanatory comment
-// quoting `CREATE TABLE x (a TEXT PRIMARY KEY, b TEXT)`. extractors/envelopes.mjs carries the
-// identical guard for the identical reason.
-// The `#` arm is what makes this safe on Python/Ruby/shell, where the JS comment
-// markers never appear: without it, this file's own Python-side equivalent — a
-// `# CREATE TABLE x (` line of explanation — would mint a phantom table exactly
-// as the JS form once did. `--` needs no arm here because `stripComment` already
-// removes it before any pattern runs.
 const JS_COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|#)/;
 const unquote = value => String(value).replace(/^["`[]|[\]"`]$/g, '');
 const splitColumns = value => value.split(',').map(part => unquote(part.trim().split(/\s+/)[0])).filter(Boolean);
@@ -121,8 +60,7 @@ export function parseCreateTables(lines) {
         line: index + 1, columns: [], primary_key: [], unique: [], refs: [], check_enums: [],
       };
       depth = 1;
-      // A single-line `CREATE TABLE x (a TEXT PRIMARY KEY, b TEXT)` closes on its
-      // own line (src/substrate/db.mjs:212 is exactly this shape).
+      // Preserve source witnesses; do not infer authority from naming conventions alone.
       depth += netParens(after);
       if (depth <= 0) { collectBody(open, after, index + 1); tables.push(finish(open)); open = null; }
       else collectBody(open, after, index + 1);
@@ -130,9 +68,7 @@ export function parseCreateTables(lines) {
     }
     const before = depth;
     depth += netParens(line);
-    // Only a line that STARTS at depth 1 is a column or table constraint of this
-    // table; a continuation line inside `CHECK (status IN (...))` starts deeper
-    // (plugins/task-orchestration/server/aggregates/stagedDispatchJob/repo.mjs:105).
+    // Preserve source witnesses; do not infer authority from naming conventions alone.
     if (before === 1) collectBody(open, line, index + 1);
     if (depth <= 0) { tables.push(finish(open)); open = null; }
   }
@@ -172,11 +108,7 @@ function collectBody(open, line, lineNumber) {
   }
   const foreignKey = line.match(TABLE_FOREIGN_KEY);
   if (foreignKey) {
-    // The `REFERENCES` half may sit on the SAME line or the NEXT one
-    // (plugins/episodic-memory/server/index.mjs:108 keeps them together;
-    // src/plugin-runtime/sqlInbox.mjs:58-59 splits them). Only the same-line
-    // form is groundable from here; the split form is picked up by the
-    // pending-reference carry below.
+    // Preserve source witnesses; do not infer authority from naming conventions alone.
     const reference = line.match(COLUMN_REFERENCES);
     const columns = splitColumns(foreignKey[1]);
     if (reference) for (const column of columns) open.refs.push({ column, target_table: unquote(reference[1]), target_column: reference[2], line: lineNumber, form: 'table_foreign_key' });
@@ -286,35 +218,7 @@ function scanDdlComments(lines, tables, ctx) {
 
 export default {
   kind: 'sqlite_table',
-  // PORTABILITY (semantic-portability-report-2026-07-27.md §F1). This was
-  // `/\.[cm]?[jt]s$/i` — JS/TS ONLY — because on THIS estate the DDL lives in
-  // server-side `.mjs` template literals. That gate is the single reason the
-  // `entity` semantic family scored ZERO on every foreign estate measured:
-  //   * task-management declares `processed_files` and `tasks` in PYTHON
-  //     (src/voice_task_manager/utils/database.py:53,:76) — never opened;
-  //   * sw declares 42 BigQuery tables/views in `.sql` files
-  //     (<component>/bigquery/migrations/0001_create_tables.sql)
-  //     — routed to sql.mjs, which emits only a NAME (`sql_object`) and no
-  //     columns, keys or references, so entity-layer.mjs (which consumes
-  //     `sqlite_table` / `sqlite_ref` / `sqlite_id_column` and nothing else)
-  //     saw an empty table registry.
-  // The proof this was failure-to-look and not genuine absence: discover-entities.mjs
-  // ALREADY reads the same `CREATE TABLE` lines out of those same `.py` files under
-  // its `sqlite-create-table` anchor and reported them as clusters. Two readers of
-  // one piece of evidence, one of them blind.
-  //
-  // The languages listed are exactly the ones this repo already parses with a
-  // tree-sitter extractor (js/ts, python, c#, kotlin, swift) plus `.sql` itself,
-  // plus the three other common hosts of embedded DDL. Widening the gate does not
-  // widen the CLAIM: the parser still reads only `CREATE TABLE` blocks, still skips
-  // comment lines, and still emits one fact per real line.
-  //
-  // `.sql` overlaps sql.mjs deliberately. The two emit DIFFERENT fact kinds
-  // (`sql_object` vs `sqlite_table`) which merge.mjs routes to different node kinds
-  // (`sql:` nodes via merge.mjs:376 vs the entity layer's table registry), so there
-  // is no double-count — there is a NAME-only record and a STRUCTURE record of the
-  // same declaration, which is what lets the map say both "this object exists" and
-  // "these are its columns".
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   filePattern: /\.(?:[cm]?[jt]sx?|py|sql|kt|swift|cs|rb|go|php|java)$/i,
   scan(lines, ctx) {
     const facts = [];
@@ -324,8 +228,7 @@ export default {
       const referenced = new Set(table.refs.map(ref => ref.column));
       facts.push(ctx.fact('sqlite_table', table.line, {
         table: table.table,
-        // Null on an unqualified declaration, so this estate's output is
-        // byte-identical to what it was before qualified names were parsed.
+        // Preserve source witnesses; do not infer authority from naming conventions alone.
         ...(table.qualified_name ? { qualified_name: table.qualified_name } : {}),
         primary_key: table.primary_key,
         column_count: table.columns.length,

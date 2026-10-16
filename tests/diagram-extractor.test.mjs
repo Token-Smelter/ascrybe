@@ -30,10 +30,10 @@ test('node labels and identifiers are both kept, and diagram keywords are never 
 
 test('sequence messages are relations and comments are not scanned', () => {
   const facts = scan(['```mermaid', 'sequenceDiagram', '  participant W as Worker',
-    '  W->>Bus: emit(work_order.accepted)', '  %% A --> B should be ignored', '```'].join('\n'));
+    '  W->>Bus: emit(parcel_order.accepted)', '  %% A --> B should be ignored', '```'].join('\n'));
   const edge = facts.find(fact => fact.kind === 'diagram_relation');
   assert.deepEqual([edge.from_identifier, edge.to_identifier, edge.relation_label, edge.diagram_shape],
-    ['W', 'Bus', 'emit(work_order.accepted)', 'sequence']);
+    ['W', 'Bus', 'emit(parcel_order.accepted)', 'sequence']);
   assert.equal(facts.some(fact => fact.from_identifier === 'A'), false);
   assert.equal(facts.find(fact => fact.node_identifier === 'W').node_label, 'Worker');
 });

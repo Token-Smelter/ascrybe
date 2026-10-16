@@ -4,50 +4,13 @@ import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { createWriteStream } from './readonly-guard.mjs';
 
-// '.estate-map' is this tool's own documented output directory (see
-// README.md Phase 0); excluding it by name keeps a re-scan of an estate that
-// already carries derived output from treating its own prior run as source.
-// 'bin' is deliberately NOT in this list. In compiled ecosystems (C#/Java) `bin/` is build
-// output, but in the Node/TypeScript ecosystem `bin/` at a package root is SOURCE by
-// convention: npm's `bin` field points at checked-in scripts, and `cdk init` scaffolds every
-// CDK app's entrypoint as `bin/<app>.ts`. Excluding it wholesale made the map structurally
-// blind to the entrypoint of any CDK application — the one file that says which stacks get
-// deployed. Compiled siblings inside such a directory are still excluded by the `.d.ts`
-// suffix rule and de-duplicated by merge.mjs's `source_over_generated_sibling` resolution.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 export const DEFAULT_EXCLUDED_DIRS = Object.freeze(['.git','node_modules','obj','dist','build','out','.next','.nuxt','vendor','Pods','Carthage','DerivedData','.gradle','.idea','target','coverage','__pycache__','.venv','venv','.terraform','.cache','.npm','.yarn','.pnpm-store','.estate-map']);
 export const DEFAULT_EXCLUDED_EXTENSIONS = Object.freeze(['.map','.png','.jpg','.jpeg','.gif','.webp','.ico','.pdf','.zip','.gz','.tgz','.tar','.7z','.jar','.war','.class','.dll','.exe','.so','.dylib','.a','.o','.woff','.woff2','.ttf','.eot','.mp3','.mp4','.mov','.avi','.sqlite','.db']);
 export const DEFAULT_MAX_FILE_BYTES = 1024*1024;
 export const SKIP_DIRS = new Set(DEFAULT_EXCLUDED_DIRS);
 
-// ---------------------------------------------------------------------------
-// Scan-scope exclusions (default-on, explicitly overridable)
-// ---------------------------------------------------------------------------
-//
-// WHY: a scan that walks vendored dependency trees, generated build output and
-// duplicate worktree checkouts measures those trees, not the estate. Measured
-// on a real 27-component estate, 56,947 of 60,174 graph nodes (94.6%) came
-// from exactly those three categories, and the graph's single largest
-// connected component was 98.65% one scanned Python virtualenv.
-//
-// CONTRACT (all of these are load-bearing):
-//   * Categories are named GENERICALLY by what a directory IS (vendored
-//     dependency / build artifact / duplicate worktree / tool-or-VCS
-//     metadata). No product, company or repository name appears here.
-//   * Every rule is DECLARED in this one table, so the active set is
-//     inspectable (see describeScopeExclusions) rather than buried in
-//     traversal code.
-//   * The set is DEFAULT-ON and can be turned off per call
-//     (`defaultScopeExclusions:false`, CLI `--no-default-scope-exclusions`),
-//     which reproduces exactly the prior behaviour: only the legacy
-//     DEFAULT_EXCLUDED_DIRS names plus the legacy `*.min.js` file rule apply.
-//   * It COMPOSES WITH `.estate-mapignore` (estate-relative prefix
-//     exclusion) rather than replacing it: both are consulted, independently.
-//   * It is name/pattern based only: no file contents are read, no process is
-//     spawned, no Git state is consulted, and nothing is executed. Matching is
-//     deterministic and offline.
-// Category names deliberately match tools/estate-map/analyze-connectivity.mjs's
-// scan-scope vocabulary so exclusion accounting and connectivity attribution
-// speak the same language.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 export const SCOPE_EXCLUSION_CATEGORIES = Object.freeze({
   vendored_dependency: Object.freeze({
     description: 'third-party code installed into the tree by a package manager',
@@ -181,7 +144,7 @@ export function classifyExcludedPath(estateRelativePath, { defaultScopeExclusion
 //     The class is a pure function of the estate-relative path, so two runs
 //     agree and a reader can verify the class by looking at the path.
 //   * ORDER IS PART OF THE CONTRACT. `fixture` is tested before `test`
-//     because `client/e2e/work-explorer/fixtures/*.ts` is both, and the more
+//     because `client/e2e/parcel-view/fixtures/*.ts` is both, and the more
 //     specific true statement is the one worth carrying.
 export const PROVENANCE_CLASSES = Object.freeze(['production','test','fixture','docs']);
 export const PROVENANCE_CLASS_RANK = Object.freeze(Object.fromEntries(PROVENANCE_CLASSES.map((value,index)=>[value,index])));
@@ -388,7 +351,13 @@ const WORKTREE_ADMIN_PATTERN = /\/\.git\/worktrees\/[^/]+$/;
 // chars for SHA-1, 64 for SHA-256). Arbitrary nonempty bytes -- e.g. a
 // fabricated HEAD written by hand -- match neither shape and must fail open.
 const HEAD_REF_PATTERN = /^ref: refs\/\S+$/;
-const HEAD_OID_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+export const HEAD_OID_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+/**
+ * A source identity: a 40-character commit for one repository, or a 64-character digest for an
+ * estate of several. Validators that hard-coded 40 were the reason the paid stage could not run
+ * over a composite estate -- each rejected the identity the projection derives for one.
+ */
+export const isSourceIdentity = value => HEAD_OID_PATTERN.test(String(value ?? ''));
 // A real Git config file (e.g. the common repository's `.git/config`,
 // written by `git init`) always opens with a `[core]` section, optionally
 // preceded by blank lines or `#`/`;` comments. This is meaningful
@@ -515,11 +484,14 @@ export async function linkedWorktreeGitdir(absolute) {
 // Git ignore syntax (no globs, no negation) and deliberately cannot escape
 // the estate root: `..` segments, absolute paths, and empty-after-normalize
 // lines are rejected line-by-line rather than failing the whole file.
-export async function readEstateMapIgnore(estateRoot) {
-  let text;
-  try { text = await fs.readFile(path.join(estateRoot, '.estate-mapignore'), 'utf8'); } catch { return []; }
+// The line-parsing RULE is shared by every reader of a `.estate-mapignore` file, regardless of
+// how that file's bytes were obtained. `readEstateMapIgnore` below reads them from a live
+// checkout; `tools/delta-update-run.mjs` reads the SAME file's bytes through Git plumbing (no
+// checkout) and must apply the IDENTICAL rule, or a path ignored by one caller and not the other
+// is a silent scope divergence, not a documented one.
+export function parseEstateMapIgnoreLines(text) {
   const prefixes = [];
-  for (const rawLine of text.split(/\r?\n/)) {
+  for (const rawLine of String(text ?? '').split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
     const normalized = normalizePath(line).replace(/^\.\//, '').replace(/\/+$/, '');
@@ -527,6 +499,11 @@ export async function readEstateMapIgnore(estateRoot) {
     prefixes.push(normalized);
   }
   return [...new Set(prefixes)].sort((a, b) => a.localeCompare(b));
+}
+export async function readEstateMapIgnore(estateRoot) {
+  let text;
+  try { text = await fs.readFile(path.join(estateRoot, '.estate-mapignore'), 'utf8'); } catch { return []; }
+  return parseEstateMapIgnoreLines(text);
 }
 export function isIgnoredPath(estateRelativePath, ignorePrefixes) {
   if (!ignorePrefixes || !ignorePrefixes.length) return false;

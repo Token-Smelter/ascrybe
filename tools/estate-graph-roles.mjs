@@ -40,6 +40,7 @@ export const RELATION_REGISTRY = Object.freeze({
   publishes_envelope: structural('from'),
   member_of: structural('to'),
   observed_in: structural('to'),
+  declares_value: structural('from'),
 
   // Flow: dependency and message traffic between peers.
   imports: flow,
@@ -108,11 +109,45 @@ export const NODE_PLANE_REGISTRY = Object.freeze({
   DeclarationComment: 'observation',
   EmptyDeclaration: 'observation',
   ExtractionRefusal: 'observation',
+  // Every exact per-occurrence extracted-fact node estate-graph-projection.mjs mints from
+  // EXTRACTED_FACT_KINDS shares one property: it is addressed by the content hash of the one
+  // record an extractor emitted, never by a resolved identity, so it observes what was found
+  // rather than declaring what the estate is. Absent here, each fell back to `unclassified` and
+  // contributed to no structural count or plane total -- present in the graph, invisible to both.
+  AwsResource: 'observation',
+  AwsUsage: 'observation',
+  ConfiguredUrl: 'observation',
+  Dependency: 'observation',
+  EnvelopeMention: 'observation',
+  EnvironmentBinding: 'observation',
+  HttpClientCall: 'observation',
+  InlineScript: 'observation',
+  LiteralLeaf: 'observation',
+  LiteralValue: 'observation',
+  PathAlias: 'observation',
+  PathExpression: 'observation',
+  PersistenceTarget: 'observation',
+  PredicateLiteral: 'observation',
+  Reference: 'observation',
+  RepositoryCoverage: 'observation',
+  ServiceHostname: 'observation',
+  SqlMigration: 'observation',
+  SqliteComment: 'observation',
+  SqliteIdColumn: 'observation',
+  SqliteReference: 'observation',
+  SqliteTable: 'observation',
+  StringConstant: 'observation',
+  TerraformReference: 'observation',
+  ThrowSite: 'observation',
+  YamlRecord: 'observation',
 
   Document: 'documentary',
   Claim: 'documentary',
   Diagram: 'documentary',
   DiagramRelation: 'documentary',
+  // A diagram's drawn node is the same documentary assertion as its drawn edges: it is what a
+  // document draws, never a witnessed fact about running code.
+  DiagramNode: 'documentary',
   DocumentSection: 'documentary',
   Assertion: 'documentary',
 

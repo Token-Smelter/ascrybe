@@ -1,0 +1,126 @@
+{
+  "schema": "ascrybe/public-document-authority/v1",
+  "scope": "Published documentation only; no claims about unpublished records or unavailable history.",
+  "documents": [
+    {
+      "document_id": "AGENTS.md",
+      "bytes": 2026,
+      "sha256": "cb05a92a6d6c00da9f42bf265b8397c1425b6a7a6cf3bd8dead4b6ee97fd3390",
+      "produced_at_commit_sha": "dc4aab3fa599191e904016085da3d915bba344a9"
+    },
+    {
+      "document_id": "CONTRIBUTING.md",
+      "bytes": 2426,
+      "sha256": "8d2afd61eed5313667b5dfa35e4045689524b262a6eb0f23719cbcf765949c5a",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "README.md",
+      "bytes": 4942,
+      "sha256": "cfd31cfd3fac1409d2ade50cad7b874b602455dc853d76a09a59ff0a3ca64172",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "USAGE.md",
+      "bytes": 39148,
+      "sha256": "3159074165fc0a062a3e60af82103bdf4cb0b2c6fbce7db17d3c5845ba6fd0ec",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/architecture.md",
+      "bytes": 4708,
+      "sha256": "898877a7b052ad2fb314ffaee6584f036521c6df90fa4a75ccfb7fe1931d5753",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/before-a-pr.md",
+      "bytes": 2640,
+      "sha256": "16e07e43720fa203ccac1bde80882e638e54bb28412eb150b0dd30dda1aa87d6",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/concepts.md",
+      "bytes": 4501,
+      "sha256": "3edaf754883cb4c8cd6c0d167e40377f286baebeab0a54f8eac37a33f78a9ece",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/delta-documentary-update-status.md",
+      "bytes": 11591,
+      "sha256": "426f68994cd5061c89d2c682df0403c5a7e70e503974492676ed015cd8887750",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/delta-file-scope-implementation-status.md",
+      "bytes": 25880,
+      "sha256": "63c8b9eb44f288225dcdfffd4870b108068ed0a97af6bc33f7d4abc0cebf39b9",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/delta-updatable-estate-maps.md",
+      "bytes": 44896,
+      "sha256": "cc88ad91d62aaa0e50887ed6b9d7a84a77abe3f41557dba28ceb4cf7573659b4",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/document-standing.md",
+      "bytes": 4628,
+      "sha256": "cf0cc66820475059c8de793ff88defbd5ce72cedd8e901d42818785f2f3ea74b",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/entity-analysis.md",
+      "bytes": 2956,
+      "sha256": "c6f23f98ac1982c5eebc7996fa0e6999ee26daa90cdc26f5b3154b6b28def96c",
+      "produced_at_commit_sha": "99bb33112a23b40bbfce80eec6dd866bbc33dee1"
+    },
+    {
+      "document_id": "docs/evaluation.md",
+      "bytes": 3430,
+      "sha256": "85f8ead1cb699191f949aa59190d717ce8039d37e25b14ce963fcbef8c5c93a2",
+      "produced_at_commit_sha": "17ea1eb00a0ccb6655d76da23ddc9c4fc2736123"
+    },
+    {
+      "document_id": "docs/ideas/claim-dating.md",
+      "bytes": 1910,
+      "sha256": "312ead365ed5e9f9900e2ddfb12f5bb2bec3cd19ff5b5b4f663e2f7c49423764",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/improvement-loop.md",
+      "bytes": 5874,
+      "sha256": "ab3d42171a0e756c690640144a22d5b61ecb541c5c5d588200d11f73c11c4fe9",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/multi-repository-documentary-campaigns.md",
+      "bytes": 30436,
+      "sha256": "d02358afbf786886f3c2a4af45641114aac4bc2a83defa6da76dbfe17ba28ff6",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/operating.md",
+      "bytes": 5888,
+      "sha256": "209245657d94cc06093bf93ac929c72e9929753540faecdaa910c738adec62df",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/query-surface.md",
+      "bytes": 3417,
+      "sha256": "4b2042734940ff077bcc73429f39cc948d1f394115a9c1a069900d6f74651da8",
+      "produced_at_commit_sha": "f4fa7c2f9782095a69197cb994dcbf17819d91b0"
+    },
+    {
+      "document_id": "docs/releasing.md",
+      "bytes": 1859,
+      "sha256": "bfd0c3c1d16399f0c3f84e90cc4e952db679f34fde48c8a5cc3fb09262de73e4",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    },
+    {
+      "document_id": "docs/verification.md",
+      "bytes": 2823,
+      "sha256": "6ced1a06cafd2119ec5076cc19bc158b66659b9f70d7b1108f9125e912531c82",
+      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+    }
+  ]
+}

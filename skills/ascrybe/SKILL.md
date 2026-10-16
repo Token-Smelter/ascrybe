@@ -138,7 +138,7 @@ MATCH (r)-[:ESTATE_EDGE {projection_id: $projection_id, relation: "relates_asser
 RETURN r.label AS conflict, collect(a.label) AS claims'
 
 # What does one document assert, and could any of it be refuted by code?
-ascrybe cypher --parameters '{"doc":"design/features/normative-plane/DESIGN.md"}' --query '
+ascrybe cypher --parameters '{"doc":"design/features/parcel-example-13/DESIGN.md"}' --query '
 MATCH (a:EstateNode {projection_id: $projection_id, kind: "Assertion"})
   -[:ESTATE_EDGE {projection_id: $projection_id, relation: "asserted_in"}]->
   (d:EstateNode {projection_id: $projection_id}) WHERE d.label = $doc
@@ -165,7 +165,7 @@ A variable-length pattern puts the range before the property map: `-[r:ESTATE_ED
 
 ```bash
 # Every plugins/** file with a literal emit or consume fact for one envelope, with its line
-ascrybe cypher --parameters '{"kind":"acceptance.brew_requested"}' --query '
+ascrybe cypher --parameters '{"kind":"acceptance.batch_requested"}' --query '
 MATCH (e:EstateNode {projection_id: $projection_id, kind: "Envelope"}) WHERE e.label = $kind
 MATCH (m:EstateNode {projection_id: $projection_id})-[r:ESTATE_EDGE {projection_id: $projection_id}]->(e)
 WHERE r.relation IN ["emits","consumes"] AND m.label STARTS WITH "plugins/"
@@ -173,13 +173,13 @@ WHERE r.relation IN ["emits","consumes"] AND m.label STARTS WITH "plugins/"
 RETURN DISTINCT r.relation AS direction, m.label AS file, r.properties_json AS witnesses'
 
 # What a plugin composes, by tier
-ascrybe cypher --parameters '{"plugin":"task-orchestration"}' --query '
+ascrybe cypher --parameters '{"plugin":"parcel-example-12"}' --query '
 MATCH (p:EstateNode {projection_id: $projection_id, kind: "Plugin"}) WHERE p.label = $plugin
 MATCH (p)-[r:ESTATE_EDGE {projection_id: $projection_id, role: "structural"}]->(c:EstateNode {projection_id: $projection_id})
 RETURN r.relation AS relation, c.kind AS kind, count(*) AS n ORDER BY n DESC'
 
 # Blast radius: what depends on a module, two hops out
-ascrybe cypher --parameters '{"file":"plugins/task-orchestration/server/index.mjs"}' --query '
+ascrybe cypher --parameters '{"file":"plugins/parcel-example-12/server/index.mjs"}' --query '
 MATCH (m:EstateNode {projection_id: $projection_id}) WHERE m.label = $file
 MATCH (d:EstateNode {projection_id: $projection_id})-[r:ESTATE_EDGE*1..2 {projection_id: $projection_id}]->(m)
 WHERE all(e IN r WHERE e.role = "flow")

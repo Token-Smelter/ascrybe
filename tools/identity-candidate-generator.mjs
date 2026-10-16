@@ -7,7 +7,10 @@ const canonical = value => stableStringify(value).trim();
 const present = value => value !== undefined && value !== null && String(value).trim() !== '';
 
 const refusedKindReasons = Object.freeze({
-  aws_usage: 'usage_reference_not_declaration', capability_refusal: 'typed_extractor_refusal',
+  aws_usage: 'usage_reference_not_declaration', aws_usage_refusal: 'typed_extractor_refusal',
+  aws_env_binding: 'environment_wiring_observation',
+  aws_resource_declaration: 'cdk_resource_identity_deferred',
+  capability_refusal: 'typed_extractor_refusal',
   config_key: 'declared_config_identity_deferred', config_value_template: 'partially_dynamic_value',
   config_value_url: 'url_text_not_identity', coverage: 'scan_diagnostic', dep: 'dependency_reference',
   derived_value_producer: 'derived_field_witness_only', envelope_dynamic_site: 'dynamic_envelope_reference',

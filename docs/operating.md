@@ -20,6 +20,21 @@ the Neo4j connection; the values live in `.env` and nothing reads them into an a
 never passed and the provider's default decides. The same null config cost $0.0124 per window one
 week and $0.0657 the next, when a vendor default moved. A test refuses an unset level.
 
+**The config declares who the estate is.** Two fields carry a multi-repository estate, and the
+shipped example demonstrates both:
+
+| field | what it declares | who reads it |
+|---|---|---|
+| `source_repositories` | the estate's members, name to repository path | `materialize` builds the estate root from it; the query surface resolves `read-span` bytes through it |
+| `projection.estate` | which estate this deployment is | head addressing, so `<estate>:selected` cannot collide with another estate's |
+
+A member missing from `source_repositories` is a member nobody can materialize and whose source
+nobody can read back. Omitting `projection.estate` is only safe on a machine that will map exactly
+one estate, because the heads are unqualified.
+
+Commits are **not** configuration. Each repository is pinned per run, and the pin map `materialize`
+writes is the estate's source identity — see [USAGE.md](../USAGE.md).
+
 ## Building a graph
 
 ```bash
@@ -86,8 +101,8 @@ Three things bound it:
 - **Scope.** Documents whose adjudication frame is `none` are withheld from the paid read by
   default, and further exclusions are declared by category in the config. Withheld documents are
   still extracted structurally and still become nodes; only the paid read skips them.
-- **Reasoning level.** Pinned per role. For schema-constrained extraction, `off` measured 82%
-  cheaper with substantively the same claims.
+- **Reasoning level.** Pinned per role. Evaluate cost and quality for the actual task;
+  do not assume a provider default or transfer another corpus's results.
 - **Concurrency.** Retries are deliberately suppressed as unsafe, so a rate-limited window is lost
   rather than retried. Raise concurrency for throughput, but watch the lost-window count: coverage
   bought back as speed is a bad trade that shows up nowhere else.

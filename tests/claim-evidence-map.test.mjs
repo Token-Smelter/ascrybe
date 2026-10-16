@@ -183,3 +183,20 @@ test('supersession requires an explicitly superseded predecessor', () => {
     assert.throws(() => build(held, claims), error => error.code === 'CLAIM_SUPERSESSION_INVALID');
   } finally { rmSync(held.root, { recursive: true, force: true }); }
 });
+
+test('the section a claim was read under travels with it but stays out of its identity', () => {
+  // Identity must survive a change to how documents are windowed: the same statement about the
+  // same line is the same claim whether its window held one section or four.
+  const held = fixture();
+  try {
+    const plain = structuredClone(held.claims[0]);
+    const read = structuredClone(held.claims[0]);
+    read.extraction = { section_path: 'Decisions / History', section_part: 2, section_parts: 3 };
+    const [withoutSection] = build(held, [plain]).claims;
+    const [withSection] = build(held, [read]).claims;
+    assert.equal(withoutSection.read_context, undefined);
+    assert.deepEqual(withSection.read_context,
+      { section_path: 'Decisions / History', section_part: 2, section_parts: 3 });
+    assert.equal(withSection.claim_id, withoutSection.claim_id);
+  } finally { rmSync(held.root, { recursive: true, force: true }); }
+});

@@ -26,8 +26,8 @@ async function extracted(t) {
 test('configured YAML and JSON catalogs emit bounded, content-addressed entries', async t => {
   const facts = await extracted(t);
   const entries = facts.filter(fact => fact.kind === 'catalog_entry');
-  const alpha = entries.find(fact => fact.file === 'catalogs/potions.yaml' && fact.entry_key_path === 'alpha');
-  const beta = entries.find(fact => fact.file === 'catalogs/potions.yaml' && fact.entry_key_path === 'beta');
+  const alpha = entries.find(fact => fact.file === 'catalogs/recipes.yaml' && fact.entry_key_path === 'alpha');
+  const beta = entries.find(fact => fact.file === 'catalogs/recipes.yaml' && fact.entry_key_path === 'beta');
   const fast = entries.find(fact => fact.file === 'catalogs/checks.json' && fact.entry_key_path === 'fast');
   const refusals = facts.filter(fact => fact.kind === 'catalog_entry_refusal').map(fact => ({
     file: fact.file, reason: fact.reason, entry_key_path: fact.entry_key_path ?? null,
@@ -41,7 +41,7 @@ test('configured YAML and JSON catalogs emit bounded, content-addressed entries'
     fast: { command: 'node test', retries: 2, enabled: true },
     refusals: [
       { file: 'catalogs/broken.json', reason: 'catalog_json_parse_error', entry_key_path: null, key_path: null, limit: null },
-      { file: 'catalogs/potions.yaml', reason: 'catalog_scalar_value_exceeds_limit', entry_key_path: 'beta', key_path: 'huge', limit: 400 },
+      { file: 'catalogs/recipes.yaml', reason: 'catalog_scalar_value_exceeds_limit', entry_key_path: 'beta', key_path: 'huge', limit: 400 },
     ],
     digest: true, unconfigured: false,
   });

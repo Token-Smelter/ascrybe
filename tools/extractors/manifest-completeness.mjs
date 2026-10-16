@@ -1,46 +1,4 @@
-// F4 — MANIFEST COMPLETENESS: EMPTY/ABSENT KEYS + ADJACENT COMMENTS
-// (orientation-test-report.md §7.2 P1).
-//
-// WHY THIS EXISTS. §7.2 F4: "The map emits a `capability_flow` fact only for
-// *non-empty* requires, so `requires_capabilities: []` is structurally
-// invisible — it cannot distinguish 'declares nothing' from 'key absent,' and
-// **an absence is itself a design statement** (`failure-observatory/
-// plugin.yaml:12-13` is precisely that). Comment retention adjacent to manifest
-// and DDL keys additionally exposes the stale-comment class that Q10 and the
-// round-2 report both turn on."
-//
-// Q8 asks for the plugin that declares `requires_capabilities: []` AND the
-// stated design reason. Both halves are unanswerable from the pre-F4 map: the
-// empty list minted no fact at all, and the reason lives in a YAML COMMENT,
-// which no extractor read.
-//
-// WHAT IT EXTRACTS (plugin manifests only — `**/plugin.yaml`).
-//   manifest_key_presence  one per key in the validator-grounded vocabulary,
-//                          stamped present_nonempty | present_empty | absent,
-//                          with the element count for list-shaped keys.
-//   manifest_comment       one per comment line in the file, attached to the
-//                          key it precedes (or trails on the same line), so a
-//                          stated design reason is retrievable BY THE KEY it
-//                          justifies rather than by grepping prose.
-//
-// WHERE THE VOCABULARY COMES FROM (source-grounded, not invented). The keys
-// below are the literals the substrate's own manifest validator names:
-// `REQUIRED = ["name","version","api_version","entry_point"]` at
-// src/substrate/pluginManifest.mjs:31, and the six list-shaped fields at
-// src/substrate/pluginManifest.mjs:46
-// (`provides_capabilities`, `requires_capabilities`, `publishes_envelopes`,
-// `subscribes_envelopes`, `http_routes`, `state_machines`), plus
-// `session_affordances` (validated at the same site) and `subscribes_to` (the
-// block the envelope extractor reads). `vocabulary_source` is stamped on every
-// absent-key fact so a reader can audit the list rather than trust it.
-//
-// WHAT IT REFUSES, TYPED. An `absent` fact is witnessed at the FILE, line 1 —
-// an absence has no line of its own, and inventing one would be a drifted
-// citation. Keys OUTSIDE the vocabulary are reported only when PRESENT (as
-// `in_vocabulary: false`); this module never claims a key is absent from a
-// vocabulary it does not carry.
-//
-// READ-ONLY / NO-EXEC: parses redacted text; no evaluation, no I/O.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 import YAML from 'yaml';
 
@@ -48,14 +6,14 @@ const MANIFEST_PATTERN = /(?:^|\/)plugin\.ya?ml$/i;
 const COMMENT_TEXT_CAP = 400;
 const COMMENT_CAP = 200;
 
-// See header: every entry is a literal read off src/substrate/pluginManifest.mjs.
+// See header: every entry is a literal read off the host runtime module
 export const MANIFEST_KEY_VOCABULARY = Object.freeze([
   'name', 'version', 'api_version', 'entry_point',
   'provides_capabilities', 'requires_capabilities',
   'publishes_envelopes', 'subscribes_envelopes', 'subscribes_to',
   'http_routes', 'state_machines', 'session_affordances',
 ]);
-export const VOCABULARY_SOURCE = 'src/substrate/pluginManifest.mjs REQUIRED + validateManifest list-shaped fields';
+export const VOCABULARY_SOURCE = 'src/runtime/manifest.mjs REQUIRED + validateManifest list-shaped fields';
 
 const cap = (text) => {
   const value = String(text ?? '');

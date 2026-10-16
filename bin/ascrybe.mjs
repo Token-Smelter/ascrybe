@@ -26,22 +26,58 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // larger V8 heap: a corpus projection holds the whole generation in memory before writing any of
 // it, and a shebang cannot portably carry the flag.
 const COMMANDS = {
+  snapshot: { script: 'tools/snapshot-source.mjs', describe: 'import an authorized non-Git folder into private screened snapshot custody' },
   state: { script: 'tools/artifact-state.mjs', verbs: ['init', 'migrate', 'verify', 'snapshot'],
     describe: 'create or check the external artifact root' },
+  // The heap is not decoration. Materialization holds one repository's every blob in memory
+  // before it writes any of them, so a repository in the tens of thousands of files exhausts the
+  // default heap and takes the whole estate with it.
+  materialize: { script: 'tools/materialize-estate.mjs', config: true, heap: 16384,
+    describe: 'build an estate root from the repositories the config declares' },
   extract: { script: 'tools/extract.mjs', describe: 'read an estate into facts' },
   merge: { script: 'tools/merge.mjs', describe: 'reconcile facts into one code graph' },
   remap: { script: 'scripts/remap.mjs', describe: 'resolve the code plane and its referents' },
-  claims: { script: 'tools/semantic-map-run.mjs', describe: 'the paid documentary read' },
+  // Binding materializes claims and evidence together; reserve heap headroom before
+  // dispatch so the runtime allocator does not abort ahead of the producer's checks.
+  claims: { script: 'tools/semantic-map-run.mjs', heap: 49152, describe: 'the paid documentary read' },
+  // File-scope delta planning only (docs/delta-file-scope-implementation-status.md): per-unit
+  // identity/cache reuse, Estate Build Manifest assembly, and the full-vs-delta equivalence
+  // oracle. --promote is always a typed refusal -- this verb never stages, never runs CAS, and
+  // never changes what a selected/working generation serves.
+  // config:true so the SAME catalog_globs an estate's ascrybe.config.json declares reaches this
+  // verb by default too (tools/delta-update-run.mjs reads it leniently: no config file at the
+  // resolved default location is not an error -- this verb still needs no live estate to run at
+  // all -- but an explicit --runtime-config or --catalog-globs that IS present and invalid still
+  // refuses).
+  update: { script: 'tools/delta-update-run.mjs', config: true,
+    describe: 'plan a delta/full/shadow update build and run the equivalence oracle (never promotes)' },
   project: { script: 'tools/project-estate-map.mjs', config: true, heap: 16384,
     describe: 'build a graph generation and optionally promote it' },
+  // Pure: buildUnifiedEstateProjection() over a claim map and code graph already on disk. Never
+  // opens a database connection, never stages a working generation, never promotes -- the offline
+  // comparison path for a delta candidate's projection (docs/delta-documentary-update-status.md).
+  'offline-project': { script: 'tools/delta/build-offline-projection.mjs',
+    describe: 'build a projection from a claim map and code graph on disk, without Neo4j or promotion' },
+  // The supported update procedure, as one command: extract (full, deterministic), reuse
+  // documentary answers from named prior journals, --require-model coverage (always on), bind,
+  // project, and optionally stage (never promote) to a named estate. Composes `claims` +
+  // `offline-project` + `project`'s own staging step; heap matches `claims`'s own requirement
+  // since it calls the same extraction/binding path.
+  refresh: { script: 'tools/refresh-estate-graph.mjs', heap: 49152,
+    describe: 'extract, reuse prior answers, bind, project, and optionally stage -- one receipt of what was reused vs paid' },
   query: { script: 'tools/estate-graph-query.mjs', config: true, describe: 'the bounded read surface' },
   cypher: { script: 'tools/estate-graph-cypher.mjs', config: true, describe: 'read-only Cypher, projection-scoped' },
   dashboard: { script: 'tools/estate-dashboard-server.mjs', config: true, describe: 'serve the graph' },
+  'fork-view': { script: 'tools/fork-planning-view.mjs',
+    describe: 'serve a local, read-only planning and observed-graph view' },
   package: { script: 'scripts/projection-package-cli.mjs', config: true, heap: 16384,
     verbs: ['pack', 'verify', 'load'], describe: 'send a graph to another Ascrybe user, or load one' },
   skill: { script: 'scripts/build-skill-bundle.mjs', verbs: ['bundle', 'install', 'verify'],
     describe: 'build, install, or check the read-only skill' },
   eval: { script: 'tools/eval/cli.mjs', describe: 'run an evaluation' },
+  ontology: { script: 'tools/ontology/cli.mjs', config: true,
+    verbs: ['build', 'stage', 'promote', 'query', 'classify', 'analyze-gap', 'discover', 'resolve-unknown', 'align', 'inventory', 'estate', 'diagnose', 'reconcile', 'predicates', 'coverage', 'loop', 'view'],
+    describe: 'the additive interpretation sidecar -- build, stage, query, or propose source-grounded classifications and vocabularies' },
 };
 
 /**

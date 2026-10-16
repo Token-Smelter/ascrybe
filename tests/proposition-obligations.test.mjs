@@ -137,9 +137,9 @@ test('constructor exposes exact structural subjects, table headers, and numbered
     '# Structural', '',
     '| Event | Reducer action |',
     '| --- | --- |',
-    '| `brew.activation_completed` | `{ activations_count: incrementOrSet }` |',
+    '| `batch.activation_completed` | `{ activations_count: incrementOrSet }` |',
     '',
-    '3. **`design/canon/recipes.md`** — the current Pattern/Potion/Brew model (context)',
+    '3. **`design/canon/recipes.md`** — the current Pattern/Recipe/Batch model (context)',
     '',
     'Mechanical closure is deterministic; judgment closure remains fail-closed.',
     '',
@@ -147,8 +147,8 @@ test('constructor exposes exact structural subjects, table headers, and numbered
   const built = buildPropositionObligationInventory({ inventories: [inventoryMarkdown({
     path: 'structural.md', content: fixture, source_sha: 'source', corpus_digest: 'corpus',
   })] });
-  const dataRow = built.units.find(row => row.locator.text.includes('brew.activation_completed'));
-  assert.ok(dataRow.subject_handles.some(handle => handle.surface === 'brew.activation_completed'
+  const dataRow = built.units.find(row => row.locator.text.includes('batch.activation_completed'));
+  assert.ok(dataRow.subject_handles.some(handle => handle.surface === 'batch.activation_completed'
     && handle.handle_kind === 'table_row_subject'));
   assert.ok(dataRow.subject_handles.some(handle => handle.surface === '{ activations_count: incrementOrSet }'
     && handle.handle_kind === 'table_cell_reference'));

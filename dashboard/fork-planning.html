@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Ascrybe · Fork planning</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/fork-planning.css">
+  <script type="module" src="/fork-planning.js"></script>
+</head>
+<body class="fork-planning">
+  <header class="command-rail fork-rail">
+    <a class="brand" href="#top" aria-label="Ascrybe fork planning">
+      <span class="brand-mark" aria-hidden="true">⌁</span><span>Ascrybe</span>
+    </a>
+    <span class="rail-divider" aria-hidden="true"></span>
+    <strong class="rail-title">Fork planning</strong>
+    <span class="rail-spacer"></span>
+    <span id="plan-status" class="rail-state" role="status">Loading source layers…</span>
+  </header>
+  <main id="top" class="fork-workspace">
+    <section class="fork-toolbar" aria-label="View controls">
+      <div class="view-toggle" role="group" aria-label="Planning view">
+        <button type="button" data-mode="graph" aria-pressed="true">Topology</button>
+        <button type="button" data-mode="table" aria-pressed="false">Coverage table</button>
+      </div>
+      <label>Layer
+        <select id="layer-filter"><option value="both">Observed + planned</option><option value="planned">Planned</option><option value="observed">Observed only</option></select>
+      </label>
+      <label>Treatment
+        <select id="treatment-filter"><option value="all">All treatments</option></select>
+      </label>
+      <label>Evidence
+        <select id="freshness-filter"><option value="all">All freshness</option><option value="current">Current</option><option value="stale">Stale</option><option value="unknown">Unknown</option></select>
+      </label>
+      <label class="filter-search"><span class="sr-only">Find a component</span><input id="component-search" type="search" placeholder="Find a component" autocomplete="off"></label>
+    </section>
+    <section class="fork-body" aria-label="Architecture and intent">
+      <div class="fork-canvas">
+        <div class="canvas-head">
+          <div><h1 id="scenario-title">Fork planning</h1><p id="scenario-source">Waiting for a private scenario.</p></div>
+          <div class="canvas-actions"><span id="graph-state" class="state-pill">Observed layer pending</span><button id="refresh-graph" type="button" class="refresh-button">Check graph</button></div>
+        </div>
+        <div id="graph-alert" class="graph-alert" role="status">Loading plan and observed layers…</div>
+        <div id="graph-panel" class="graph-panel" aria-label="Grouped component topology">
+          <svg id="fork-graph" role="img" aria-labelledby="fork-graph-title fork-graph-desc" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMin meet">
+            <title id="fork-graph-title">Grouped estate architecture</title>
+            <desc id="fork-graph-desc">Components are grouped by platform, service, datastore and provider. Select a component to inspect its separate current evidence, approved intent and proposed treatment.</desc>
+            <defs><marker id="fork-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker></defs>
+            <g id="fork-links"></g><g id="fork-groups"></g><g id="fork-nodes"></g>
+          </svg>
+          <p id="graph-empty" class="canvas-empty" hidden>No components match these filters. Change a filter or inspect the coverage table.</p>
+        </div>
+        <div id="table-panel" class="table-panel" hidden>
+          <table><caption>Coverage and recorded decisions</caption><thead><tr><th scope="col">Surface</th><th scope="col">Group</th><th scope="col">Observed</th><th scope="col">Approved decision</th><th scope="col">Implementation</th><th scope="col">Treatment</th></tr></thead><tbody id="coverage-body"></tbody></table>
+          <section class="decisions-section"><h2>Recorded decisions</h2><ol id="decisions-list"></ol></section>
+          <section class="decisions-section" aria-label="Uninspected coverage"><h2>Coverage still to inspect</h2><ul id="coverage-status-list"></ul></section>
+        </div>
+      </div>
+      <aside id="fork-inspector" class="fork-inspector" aria-label="Component inspector">
+        <div class="inspector-placeholder"><h2>Inspect a component</h2><p>Choose a node or coverage row to trace current source, approved intent, proposed treatment and gaps separately.</p></div>
+      </aside>
+    </section>
+  </main>
+  <footer class="status-rail fork-status"><span>Read only · no provisioning or acceptance</span><span id="projection-id">Base projection not connected</span><span id="coverage-count">0 surfaces</span></footer>
+</body>
+</html>

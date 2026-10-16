@@ -67,9 +67,6 @@ test('a relation carries both sides verbatim so a reader can check the call', ()
 });
 
 test('a bare arrow is silent about how two things relate, not in disagreement', () => {
-  // One diagram labels its edge, another draws the same transition without a label. That is one
-  // diagram being terser, and calling it a disagreement was the largest source of false relations
-  // measured on a real corpus.
   const labelled = drawn({ from: 'Billing', predicate: 'retries', to: 'Ledger', document: 'one.md' });
   const bare = drawn({ from: 'Billing', predicate: '-->', to: 'Ledger', document: 'two.md' });
   const held = classifyAssertionPair(labelled, bare);
@@ -79,8 +76,6 @@ test('a bare arrow is silent about how two things relate, not in disagreement', 
 });
 
 test('an endpoint too generic to name anything is recorded but never compared', () => {
-  // Two diagrams both drawing A --> B are not discussing the same thing; comparing on such
-  // endpoints manufactured 5,444 relations from single-letter collisions in a real corpus.
   const held = assertionRelations([
     drawn({ from: 'A', predicate: 'calls', to: 'B', document: 'one.md' }),
     drawn({ from: 'A', predicate: 'does not call', to: 'B', document: 'two.md' }),

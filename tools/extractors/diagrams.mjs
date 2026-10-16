@@ -70,12 +70,6 @@ function diagramKind(body) {
   return 'unknown';
 }
 
-// A diagram's own existence is the primary fact. Its identifiers are diagram-local shorthand —
-// measured across 615 host-runtime documents, 78% of them name nothing in the estate — so the fence
-// itself, kept verbatim, is what a reader can always trust: this document drew this, here. Edges
-// extracted from it are assertions ABOUT that drawing, not a substitute for it, and grounding a
-// drawn identifier to a real entity is a later receipt-backed step. An ungrounded assertion is
-// honest; a wrongly grounded one would be the failure this map exists to refuse.
 function scanDiagram({ body, startLine, syntax, ctx, facts, mode }) {
   const shape = diagramKind(body);
   const text = body.join('\n');

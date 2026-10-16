@@ -1,33 +1,4 @@
-// AST-based Swift extractor (web-tree-sitter, WASM), mirroring
-// treesitter-js.mjs's structure for JS/TS/TSX.
-//
-// Swift is architecturally different from JS/TS in one load-bearing way:
-// within a single Swift MODULE, top-level declarations across ALL of that
-// module's files are visible to every other file in the module with no
-// per-file import statement between them. `import Foo` names an external
-// MODULE/framework dependency (Foundation, UIKit, an SPM package, ...), not
-// a file in this project. So this extractor emits THREE fact kinds:
-//   - 'module'    one per .swift file (same convention as treesitter-js.mjs)
-//   - 'import'    one per `import Foo` framework/module import, carrying
-//                 the raw module name -- always resolved as an external
-//                 dependency by merge.mjs's `imports_framework` pass, never
-//                 as a file (see merge.mjs for the two-edge-kind design).
-//   - 'symbol'    one per top-level declared class/struct/enum/protocol/
-//                 extension/func/global (let/var).
-//   - 'reference' one per top-level-type-shaped identifier usage (any
-//                 `user_type` occurrence: inheritance, property/parameter/
-//                 return type annotations, generics, casts) -- these are
-//                 what merge.mjs resolves against a project-wide symbol
-//                 table to recover Swift's file-to-file coupling, since
-//                 there is no import statement to resolve instead.
-//
-// READ-ONLY / NO-EXEC / NO-NETWORK: same guarantee as treesitter-js.mjs --
-// this module only parses text already read and secret-redacted by
-// extract.mjs, never requires/imports/evals the scanned repository's own
-// code, spawns no child process, and performs no network I/O. The only I/O
-// here is the local filesystem reads of (a) the pinned `tree-sitter-swift`
-// grammar WASM (via treesitter/loader.mjs, already a dependency for JS/TS)
-// and (b) the three committed .scm query files below.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

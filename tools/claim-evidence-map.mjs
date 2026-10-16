@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { sha256, stableCanonicalSha256, stableStringify } from './lib.mjs';
+import { sha256, stableCanonicalSha256, stableStringify, isSourceIdentity } from './lib.mjs';
 
 export const CLAIM_EVIDENCE_MAP_SCHEMA = 'estate-map/claim-evidence-map/v1';
 export const ESTATE_CLAIM_SCHEMA = 'estate-map/estate-claim/v1';
@@ -81,7 +81,15 @@ function normalizeClaim(raw, manifestByPath, root) {
     supersession_cause: raw.supersession_cause || null,
     proof_plan: Object.freeze(structuredClone(raw.proof_plan)),
   };
-  return immutableRecord(ESTATE_CLAIM_SCHEMA, 'estate-claim', body, 'claim_id');
+  const claim = immutableRecord(ESTATE_CLAIM_SCHEMA, 'estate-claim', body, 'claim_id');
+  // The section the window was read under travels with the claim but stays OUT of the identity
+  // basis: it records where a reader found the statement, and a repacked window must not fork a
+  // claim that says the same thing about the same line.
+  const section = raw.extraction?.section_path;
+  if (!section) return claim;
+  return Object.freeze({ ...claim, read_context: Object.freeze({ section_path: section,
+    ...(raw.extraction.section_parts ? { section_part: raw.extraction.section_part,
+      section_parts: raw.extraction.section_parts } : {}) }) });
 }
 
 function evidence(kind, state, body) {
@@ -376,7 +384,7 @@ function buildSupersession(claims, sourceEvidenceByClaim) {
 export function buildClaimEvidenceMap({ project, semantic_claims: semanticClaims,
   materialized_root: materializedRoot, tree_manifest: treeManifest,
   code_facts: codeFacts = [] }) {
-  if (!project?.id || !/^[0-9a-f]{40}$/u.test(project.sha || '')
+  if (!project?.id || !isSourceIdentity(project.sha)
     || project.sha !== treeManifest?.commit_sha || !Array.isArray(semanticClaims)) {
     mapError('CLAIM_EVIDENCE_INPUT_INVALID', 'claim evidence requires one project and its exact Git tree');
   }

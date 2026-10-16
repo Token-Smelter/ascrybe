@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ontology candidate</title>
+  <link rel="stylesheet" href="/ontology-candidate.css">
+  <script type="module" src="/ontology-candidate.js"></script>
+</head>
+<body>
+  <p class="banner" role="status">Generated from source and not reviewed. Nothing here is accepted, and review recording is not enabled in this viewer.</p>
+  <header class="masthead">
+    <div>
+      <h1 id="title">Loading</h1>
+      <p class="provenance" id="provenance"></p>
+    </div>
+    <dl class="counts" id="counts"></dl>
+  </header>
+  <nav class="tabbar" aria-label="Views">
+      <div class="tabs" role="tablist" aria-label="Views">
+      <button type="button" role="tab" data-tab="reconcile" aria-selected="false" hidden>Reconciled domains</button>
+      <button type="button" role="tab" data-tab="estate" aria-selected="false" hidden>Estate</button>
+      <button type="button" role="tab" data-tab="graph" aria-selected="true">Graph</button>
+      <button type="button" role="tab" data-tab="vocabulary" aria-selected="false">Definitions</button>
+      <button type="button" role="tab" data-tab="aligned" aria-selected="false" hidden>Links</button>
+      <button type="button" role="tab" data-tab="artifacts" aria-selected="false">Sources</button>
+      <button type="button" role="tab" data-tab="review" aria-selected="false">Review</button>
+      <button type="button" role="tab" data-tab="revisions" aria-selected="false">Revisions</button>
+      <button type="button" role="tab" data-tab="map" aria-selected="false">Candidate vocabulary map</button>
+    </div>
+  </nav>
+  <div class="shell" id="shell">
+    <nav class="rail" aria-label="Views and navigation">
+      <div id="rail-body" class="rail-body"></div>
+    </nav>
+    <main id="detail" class="detail" tabindex="-1" aria-live="polite"></main>
+  </div>
+  <footer class="legend" id="legend"></footer>
+</body>
+</html>

@@ -1,20 +1,17 @@
 #!/usr/bin/env node
 // ESTATE-MAP CAMPAIGN — the independent-verification candidate generator (VCEC Arm 2/3).
 //
-// WHAT THIS IS. This is the FIRST genuinely model-dependent estate-map stage. Forensic
-// archaeology (brew-88761b08) proved that every prior "neural" L1 run was a the host runtime worker
-// hand-transcribing verdicts into a committed JS literal (examples/l1-run1/build-verdicts.mjs)
-// with ZERO provider calls. This module wires the real thing: it BRIDGES the already-landed
+// This module bridges the
 // deterministic `l1-adjudicate prepare -> ingest -> reduce/apply` boundary by making REAL
 // cross-provider model calls, and it emits canonical `estate-map/adjudication-record/v1`
 // receipts that the landed ingest validates and appends fail-closed. It does NOT reimplement
 // prepare/ingest/apply/reduce — it imports and calls them.
 //
-// WHERE INDEPENDENCE LIVES. Independence is a property of THIS HARNESS, not of brew topology.
-//   * Proposer (a routed opus model) reads ONE candidate_packet and emits a
+// Independence is a property of the harness.
+//   * A configured proposer reads ONE candidate_packet and emits a
 //     normalized_proposition P plus a claim_candidate. Its rationale is QUARANTINED — it never
 //     reaches any verifier.
-//   * Four verifiers = {support-P, support-not-P} x {openai gpt-5.6-sol, google gemini-3.1-pro}
+//   * Four verifiers = {support-P, support-not-P} x {configured family A, configured family B}
 //     are BLINDED: each receives ONLY the proposition (or its canonical negation) plus
 //     harness-gathered evidence — never the proposer rationale, never a sibling's output.
 //   * Evidence is TOOL-OWNED: campaign.mjs itself runs `git grep`/`git show` over the immutable
@@ -30,8 +27,6 @@
 // frozen; obligations query only that evidence universe. No `latest` lookup, no mid-campaign
 // rescan. See CAMPAIGN_INVARIANTS below and test/tools/estateMapCampaign.test.mjs.
 //
-// NO anthropic/* CALLS. The proposer/ratifier route through the `a routed gateway` the routed gateway
-// gateway (`<configured-model>`), never `anthropic/*`. Asserted in tests.
 
 import { spawn } from 'node:child_process';
 import { constants as bufferConstants } from 'node:buffer';
@@ -41,6 +36,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, sha256, stableStringify } from './lib.mjs';
+import { requireModel } from './neural-model-runner.mjs';
 import { createRecord, validateRecordList, canonicalSerialize, semanticHash } from './adjudication-schema.mjs';
 import {
   assertInferencePromptWithinLimit,
@@ -57,23 +53,17 @@ export const CAMPAIGN_VERSION = '1';
 export const COMBINER_TRUTH_TABLE_VERSION = 'estate-map/campaign-combiner/v1';
 
 // ---------------------------------------------------------------------------
-// MODEL ROSTER — verified reachable this session. NO anthropic/*.
+// Model routes must be supplied by the caller; there is no ambient roster.
 // ---------------------------------------------------------------------------
-export const PROPOSER_MODEL = '<configured-model>';
-export const RATIFIER_MODEL = '<configured-model>';
-export const VERIFIER_FAMILY_A = 'openai-codex/gpt-5.6-sol';
-// FLIPPED default (was openrouter/google/gemini-3.1-pro-preview): the reachability-tested
-// google verifier for this build session routes through the a routed gateway the routed gateway gateway.
-export const VERIFIER_FAMILY_B = '<configured-model>';
-export const FALLBACK_MODEL = 'openai-codex/gpt-5.6-sol';
+export const PROPOSER_MODEL = null;
+export const RATIFIER_MODEL = null;
+export const VERIFIER_FAMILY_A = null;
+export const VERIFIER_FAMILY_B = null;
+export const FALLBACK_MODEL = null;
 
 // Family label per model string. Distinct families are load-bearing: the `absent` verdict's
 // A4 condition requires two negative verifiers of DISTINCT model families.
-export const MODEL_FAMILY = Object.freeze({
-  [PROPOSER_MODEL]: 'a routed anthropic model',
-  [VERIFIER_FAMILY_A]: 'openai',
-  [VERIFIER_FAMILY_B]: 'google',
-});
+export const MODEL_FAMILY = Object.freeze({});
 // The explicit map wins; otherwise a robust heuristic classifies an OVERRIDDEN --verifier
 // model string (CLI roster override) so the two verifier families stay DISTINCT — both the
 // A4/absent C4 condition and the inter-family agreement metric depend on distinctness.
@@ -89,6 +79,8 @@ export function familyOf(model) {
 // The four blinded verifier roles: two directions x two families. buildVerifierRoles lets the
 // CLI override the two verifier model strings while re-deriving each family from the string.
 export function buildVerifierRoles(verifierA = VERIFIER_FAMILY_A, verifierB = VERIFIER_FAMILY_B) {
+  requireModel(verifierA, 'verifier-a');
+  requireModel(verifierB, 'verifier-b');
   return Object.freeze([
     Object.freeze({ role: 'support-P', direction: 'support-P', model: verifierA, family: familyOf(verifierA) }),
     Object.freeze({ role: 'support-P', direction: 'support-P', model: verifierB, family: familyOf(verifierB) }),
@@ -96,16 +88,7 @@ export function buildVerifierRoles(verifierA = VERIFIER_FAMILY_A, verifierB = VE
     Object.freeze({ role: 'support-not-P', direction: 'support-not-P', model: verifierB, family: familyOf(verifierB) }),
   ]);
 }
-export const VERIFIER_ROLES = buildVerifierRoles();
-
-// Fail-closed roster gate: NO anthropic/* model may be invoked directly (credits exhausted;
-// opus routes through the a routed gateway the routed gateway gateway). Enforced at campaign start AND in
-// the unit tests, so a CLI override cannot smuggle in a forbidden provider.
-export function assertRosterNoAnthropic(models) {
-  for (const m of models) {
-    if (/^anthropic\//.test(String(m))) throw new Error(`roster model "${m}" is a forbidden anthropic/* model (credits exhausted; route opus via a routed gateway)`);
-  }
-}
+export const VERIFIER_ROLES = Object.freeze([]);
 
 export const CAMPAIGN_INVARIANTS = Object.freeze({
   snapshot_immutable: 'evidence is gathered once against G0 and frozen; no latest lookup or mid-campaign rescan',
@@ -113,7 +96,7 @@ export const CAMPAIGN_INVARIANTS = Object.freeze({
   tool_owned_evidence: 'the harness runs git grep/show; every model runs --no-tools --no-session --no-context-files',
   pure_combiner: 'the 4->1 combiner is total, deterministic, model-free',
   ratifier_monotone: 'the ratifier may veto supported->underdetermined but can never upgrade refuted/underdetermined to supported',
-  no_anthropic_direct: 'proposer/ratifier route through the the routed gateway gateway; zero anthropic/* invocations',
+  explicit_model_routes: 'each model route is supplied explicitly by the caller',
 });
 
 // ===========================================================================
@@ -388,7 +371,7 @@ export function extractPiResult(stdout) {
     cost: Number(u.cost?.total || 0),
     cost_reported: u.cost?.total != null,
   };
-  // stopReason/errorMessage expose PROVIDER-side failures (e.g. openai-codex
+  // stopReason/errorMessage expose PROVIDER-side failures (e.g. a provider
   // provider_transport_failure -> stopReason 'error' with an empty content[]), which otherwise
   // masquerade as an unparseable answer. Surface them as terminal provider failures for custody.
   return { text, usage, found: true, model: message.model || null, stopReason: message.stopReason || null, errorMessage: message.errorMessage || null };
@@ -433,6 +416,7 @@ export async function callModel(opts) {
 }
 
 export async function callModelOnce({ model, prompt, thinking = null, runner = null, scratchDir = null, tag = 'call', timeoutMs = 90000, maxOutputBytes = DEFAULT_MAX_INFERENCE_EVENT_BYTES, maxAnswerBytes = DEFAULT_MAX_INFERENCE_ANSWER_BYTES }) {
+  requireModel(model, 'campaign model');
   const started = Date.now();
   if (runner) {
     // RESILIENT: a runner (fixture OR live) that THROWS is caught and recorded as an errored
@@ -461,12 +445,6 @@ export async function callModelOnce({ model, prompt, thinking = null, runner = n
   if (thinking) args.push('--thinking', thinking);
   const { stdout, outcome } = await new Promise((resolve) => {
     const child = spawn('pi', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    // A cap above what a JS string can hold is not a cap. `max_event_bytes` was configured at
-    // 536,870,912 while this runtime's ceiling is 536,870,888 -- twenty-four bytes lower -- so a
-    // runaway stream raced the two limits, and whichever a chunk crossed first decided whether
-    // the call was recorded as output_limit or killed the whole batch with RangeError. It killed
-    // an 8,762-window run at window 27. Byte accounting still uses the configured cap so the
-    // recorded outcome is unchanged; only what is RETAINED is clamped to what can be held.
     const retained = Math.min(maxOutputBytes, bufferConstants.MAX_STRING_LENGTH - 1024);
     let out = '';
     let outBytes = 0;
@@ -494,7 +472,7 @@ export async function callModelOnce({ model, prompt, thinking = null, runner = n
   }
   const parsed = extractPiResult(stdout);
   const json = parseModelJson(parsed.text);
-  // A provider-side stopReason:'error' (e.g. openai-codex WebSocket transport failure) exits 0
+  // A provider-side stopReason:'error' (e.g. a WebSocket transport failure) exits 0
   // but carries no answer; classify it as a terminal provider error rather than 'unparseable'.
   let finalOutcome = outcome;
   if (parsed.stopReason === 'error') finalOutcome = 'error:provider';
@@ -867,11 +845,12 @@ export async function runCampaign({
   batchSize = 24, concurrency = 6, timeoutMs = 90000, maxAttempts = 1, resumeReceipts = null,
 }) {
   if (!callFn && process.env.ALLOW_LEGACY_PAID_CAMPAIGN !== '1') throw new Error('legacy paid campaign is frozen; inject a zero-spend fixture or use the current durable-unit pipeline');
-  // Fail-closed: no anthropic/* model may be invoked (incl. via a CLI roster override).
-  assertRosterNoAnthropic([proposer, ratifier, ...verifierRoles.map(r => r.model)]);
+  requireModel(proposer, 'proposer');
+  requireModel(ratifier, 'ratifier');
+  if (verifierRoles.length !== 4) throw new Error('campaign requires four configured verifier roles');
+  for (const role of verifierRoles) requireModel(role.model, `verifier ${role.direction}`);
 
-  // Global concurrency gate: NEVER exceed the bound of live pi processes (this host also runs
-  // the live :7900 server). Clamped to [1,8]; the live campaign runs 4-8.
+  // Bound concurrent subprocesses independently of the selected provider.
   const limit = pLimit(Math.max(1, Math.min(8, concurrency)));
   // callFn (fixture) is passed to callModel as its low-level runner so BOTH the live and
   // fixture paths get identical normalization (latency_ms, usage, parsed json). Every call is
@@ -1177,7 +1156,7 @@ run        LEGACY paid campaign, frozen by default. Requires explicit ALLOW_LEGA
            --select all adjudicates EVERY candidate_packet in bounded batches (heartbeat per
            batch, receipts flushed incrementally). Re-running with the same --out RESUMES
            (skips already-receipted packets). Every pi call is timeout-wrapped; concurrency is
-           held to [1,8] live pi processes. Roster flags override the constants; NO anthropic/*.
+           held to [1,8] live pi processes. Roster flags override the constants; no vendor-specific routes.
 reconcile  Fold accepted verdicts onto ACTIVE via the landed reducer and print the conservation law.`);
     process.exit(options.help ? 0 : 1);
   }

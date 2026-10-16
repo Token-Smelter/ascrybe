@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ascrybe — Truth Surface</title>
+<style>
+:root{color-scheme:dark;--bg:#09090b;--card:#111116;--line:#27272f;--muted:#9494a3;--text:#eeeef3;--cyan:#2dd4bf;--red:#f87171;--amber:#f59e0b;--green:#4ade80}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 5%,#17202b 0,#09090b 35%);color:var(--text);font:13px/1.45 ui-sans-serif,system-ui,sans-serif}
+header{padding:19px 24px 14px;border-bottom:1px solid var(--line);background:#09090be8;position:sticky;top:0;z-index:5;backdrop-filter:blur(10px)}
+h1{font-size:19px;margin:0 0 4px}.sub{color:var(--muted);font-size:12px}.stats{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}.stat{background:#16161c;border:1px solid #2a2a33;border-radius:16px;padding:4px 9px}.stat b{color:#fff}.warn{border-color:#78350f;color:#fbbf24}.ok{border-color:#14532d;color:#86efac}
+.controls{display:grid;grid-template-columns:minmax(220px,1fr) minmax(200px,1.4fr) auto;gap:8px;margin-top:12px}select,input,button{border:1px solid #34343d;background:#17171d;color:var(--text);border-radius:7px;padding:8px;font:inherit}button{cursor:pointer}button:hover{border-color:#71717a}.buttons{display:flex;gap:6px}
+main{display:grid;grid-template-columns:minmax(520px,1.2fr) minmax(360px,.8fr);height:calc(100vh - 157px)}.graph{position:relative;min-height:520px;border-right:1px solid var(--line)}canvas{display:block;width:100%;height:100%;cursor:grab}.badge{position:absolute;left:13px;top:12px;background:#09090bd9;border:1px solid #33333c;border-radius:7px;padding:6px 9px;color:#bbb;font-size:11px;pointer-events:none}.legend{position:absolute;left:13px;bottom:10px;right:13px;display:flex;flex-wrap:wrap;gap:8px;background:#09090bd9;border:1px solid #282832;border-radius:7px;padding:7px}.legend span{font-size:10px;color:#c4c4ce}.sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.panel{overflow:auto;padding:18px 19px 50px;background:#0d0d11}.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa;margin:0 0 8px}.stmt{font-size:15px;line-height:1.5;background:#17171d;border:1px solid #292932;border-radius:7px;padding:11px}.src{margin-top:9px;padding:9px;border-left:2px solid #3f3f46;background:#121217;color:#d4d4dc;white-space:pre-wrap}.ref{font:10px ui-monospace,monospace;color:#71717a;margin-top:4px}.kv{display:grid;grid-template-columns:100px 1fr;gap:6px 10px;margin:13px 0}.k{color:#71717a}.v{overflow-wrap:anywhere}.pill{display:inline-block;border:1px solid #3f3f46;border-radius:999px;padding:2px 7px;font-size:10px}.real{border-color:#991b1b;color:#fca5a5}.ctx{border-color:#164e63;color:#67e8f9}.review{margin:9px 0;border:1px solid #166534;background:#052e16;border-radius:7px;padding:10px;color:#bbf7d0}.review strong{color:#4ade80}.raw{opacity:.72;text-decoration:line-through}.r{display:grid;grid-template-columns:12px 155px 1fr;gap:5px;padding:7px 3px;border-bottom:1px solid #232329;cursor:pointer}.r:hover{background:#18181e}.dot{width:8px;height:8px;border-radius:50%;margin-top:5px}.rt{font:10px ui-monospace,monospace}.rn{color:#d4d4dc}.resblock{margin:4px 0 10px 12px;padding:9px;border-left:2px solid #30303a;background:#121217}.rationale{margin-top:6px;color:#d4d4dc}.ctxnote{color:#a1a1aa;margin-top:5px;font-style:italic}.side{margin-top:7px}.sideh{font:10px ui-monospace,monospace;color:#67e8f9}.ex{font-size:11px;color:#bbb;background:#18181d;padding:5px;margin-top:3px}.docs{display:flex;flex-wrap:wrap;gap:5px}.doc{font:10px ui-monospace,monospace;background:#18181e;border:1px solid #292932;padding:4px 6px;border-radius:5px}.hint{color:#71717a;font-size:10px;margin-top:14px}.component-list{margin-top:14px}.component-row{display:grid;grid-template-columns:55px 70px 1fr;gap:7px;padding:6px 0;border-bottom:1px solid #222228;cursor:pointer}.component-row:hover{color:#fff}
+@media(max-width:900px){main{grid-template-columns:1fr;height:auto}.graph{height:62vh;border-right:0;border-bottom:1px solid var(--line)}.panel{max-height:none}.controls{grid-template-columns:1fr}.buttons{flex-wrap:wrap}}
+</style></head><body>
+<header><h1>Ascrybe — curated truth surface</h1><div class="sub" id="subtitle"></div><div class="stats" id="stats"></div>
+<div class="controls"><select id="component"></select><input id="search" placeholder="Search claims, documents, neighbourhoods…"><div class="buttons"><button id="largest">Largest</button><button id="flagged">Reviewed flag</button><button id="prev">←</button><button id="next">→</button><button id="overview">Overview</button></div></div></header>
+<main><section class="graph"><canvas id="g"></canvas><div class="badge" id="badge"></div><div class="legend" id="legend"></div></section><aside class="panel" id="panel"></aside></main>
+<!-- Data stays AFTER line 50: static-drop runs `head -50 | grep`, whose pipefail path SIGPIPEs if -->
+<!-- the large embedded-data line is among those first 50 lines. These explicit spacer comments are -->
+<!-- load-bearing for large single-file explorers; do not compress them above the data declaration. -->
+<!-- safe-data-boundary-spacer-1 -->
+<!-- safe-data-boundary-spacer-2 -->
+<!-- safe-data-boundary-spacer-3 -->
+<!-- safe-data-boundary-spacer-4 -->
+<!-- safe-data-boundary-spacer-5 -->
+<!-- safe-data-boundary-spacer-6 -->
+<!-- safe-data-boundary-spacer-7 -->
+<!-- safe-data-boundary-spacer-8 -->
+<!-- safe-data-boundary-spacer-9 -->
+<!-- safe-data-boundary-spacer-10 -->
+<!-- safe-data-boundary-spacer-11 -->
+<!-- safe-data-boundary-spacer-12 -->
+<!-- safe-data-boundary-spacer-13 -->
+<!-- safe-data-boundary-spacer-14 -->
+<!-- safe-data-boundary-spacer-15 -->
+<!-- safe-data-boundary-spacer-16 -->
+<!-- safe-data-boundary-spacer-17 -->
+<!-- safe-data-boundary-spacer-18 -->
+<!-- safe-data-boundary-spacer-19 -->
+<!-- safe-data-boundary-spacer-20 -->
+<!-- safe-data-boundary-spacer-21 -->
+<!-- safe-data-boundary-spacer-22 -->
+<!-- safe-data-boundary-spacer-23 -->
+<!-- safe-data-boundary-spacer-24 -->
+<!-- safe-data-boundary-spacer-25 -->
+<!-- safe-data-boundary-spacer-26 -->
+<!-- safe-data-boundary-spacer-27 -->
+<!-- safe-data-boundary-spacer-28 -->
+<!-- safe-data-boundary-spacer-29 -->
+<!-- safe-data-boundary-spacer-30 -->
+<!-- safe-data-boundary-spacer-31 -->
+<!-- safe-data-boundary-spacer-32 -->
+<!-- safe-data-boundary-spacer-33 -->
+<!-- safe-data-boundary-spacer-34 -->
+<!-- safe-data-boundary-spacer-35 -->
+<script>
+const DB = __DATA__;
+const RELC={referent_ambiguity:'#6b7280',equivalent_proposition:'#2dd4bf',compatible_partial:'#60a5fa',direct_conflict:'#f87171',terminology_conflict:'#a78bfa',scope_divergence:'#f59e0b',temporal_divergence:'#fbbf24',modality_divergence:'#fb923c',conformance_gap_candidate:'#eab308',incomparable:'#3f3f46'};
+const $=id=>document.getElementById(id),cv=$('g'),cx=cv.getContext('2d'),panel=$('panel'),select=$('component'),search=$('search');
+const rawNodes=Object.fromEntries(DB.nodes.map(n=>[n.id,n])),reviews=DB.human_reviews||{};
+let comp=null,N=[],E=[],byId={},sel=null,hov=null,drag=null,alpha=0,W=0,H=0,visibleIds=DB.components.map(c=>c.id);
+function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function resize(){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0);alpha=Math.max(alpha,.3)}addEventListener('resize',resize);
+function hash(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return(h>>>0)/4294967295}
+function optionLabel(c){return `#${c.id} · ${c.node_count} claims · ${c.edge_count} edges${c.raw_flags?' · ⚑ '+c.raw_flags:''} · ${c.label}`}
+function fillOptions(ids=visibleIds){select.innerHTML=ids.map(id=>{const c=DB.components[id];return `<option value="${id}">${esc(optionLabel(c))}</option>`}).join('')}
+function load(id){comp=DB.components[Number(id)];if(!comp)return;select.value=String(comp.id);sel=hov=drag=null;const a0=-Math.PI/2;
+ N=comp.node_ids.map((id,i)=>{const n=rawNodes[id],a=a0+2*Math.PI*i/comp.node_count,r=Math.min(W,H)*(.20+.16*hash(id));return{...n,x:W/2+Math.cos(a)*r,y:H/2+Math.sin(a)*r,vx:0,vy:0}});byId=Object.fromEntries(N.map(n=>[n.id,n]));
+ E=comp.edge_indices.map(i=>{const e=DB.edges[i];return{...e,s:byId[e.source],t:byId[e.target]}}).filter(e=>e.s&&e.t);alpha=1;renderOverview();updateLegend();$('badge').textContent=`component #${comp.id} · ${N.length} claims · ${E.length} relations · ${comp.documents.length} documents`;}
+function step(){if(alpha<.015)return;for(let i=0;i<N.length;i++){const a=N[i];for(let j=i+1;j<N.length;j++){const b=N[j],dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||1;if(d2<70000){const f=520/d2,d=Math.sqrt(d2);a.vx+=f*dx/d;a.vy+=f*dy/d;b.vx-=f*dx/d;b.vy-=f*dy/d}}a.vx+=(W/2-a.x)*.0015;a.vy+=(H/2-a.y)*.0015}for(const e of E){const dx=e.t.x-e.s.x,dy=e.t.y-e.s.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=(d-82)*.018;e.s.vx+=f*dx/d;e.s.vy+=f*dy/d;e.t.vx-=f*dx/d;e.t.vy-=f*dy/d}for(const n of N){if(n===drag)continue;n.x+=n.vx*alpha;n.y+=n.vy*alpha;n.vx*=.86;n.vy*=.86;n.x=Math.max(12,Math.min(W-12,n.x));n.y=Math.max(24,Math.min(H-12,n.y))}alpha*=.982}
+function draw(){cx.clearRect(0,0,W,H);for(const e of E){const on=sel&&(e.s===sel||e.t===sel);cx.globalAlpha=sel?(on?.95:.08):.58;cx.strokeStyle=RELC[e.rel]||'#666';cx.lineWidth=on?2:1;cx.beginPath();cx.moveTo(e.s.x,e.s.y);cx.lineTo(e.t.x,e.t.y);cx.stroke()}cx.globalAlpha=1;const degree={};N.forEach(n=>degree[n.id]=0);E.forEach(e=>{degree[e.source]++;degree[e.target]++});for(const n of N){const active=n===sel||n===hov,r=4+Math.min(6,degree[n.id]*.5);cx.globalAlpha=sel&&n!==sel&&!E.some(e=>(e.s===sel&&e.t===n)||(e.t===sel&&e.s===n))?.22:1;cx.beginPath();cx.arc(n.x,n.y,active?r+2:r,0,7);cx.fillStyle=n.modality==='normative'?'#fde68a':'#d4d4dc';cx.fill();if(active){cx.strokeStyle='#fff';cx.lineWidth=2;cx.stroke()}}cx.globalAlpha=1;const n=hov||sel;if(n){cx.font='11px sans-serif';const t=n.label,w=cx.measureText(t).width;cx.fillStyle='#09090bdd';cx.fillRect(n.x+7,n.y-17,w+10,17);cx.fillStyle='#fff';cx.fillText(t,n.x+12,n.y-5)}}
+function loop(){step();draw();requestAnimationFrame(loop)}
+function near(x,y){let best=null,d=220;for(const n of N){const z=(n.x-x)**2+(n.y-y)**2;if(z<d){d=z;best=n}}return best}function pos(e){const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]}
+cv.onmousemove=e=>{const[x,y]=pos(e);if(drag){drag.x=x;drag.y=y;alpha=Math.max(alpha,.25)}else hov=near(x,y)};cv.onmousedown=e=>{const[x,y]=pos(e);drag=near(x,y)};addEventListener('mouseup',()=>drag=null);cv.onclick=e=>{const[x,y]=pos(e),n=near(x,y);if(n){sel=n;renderNode(n)}};
+function reviewBlock(e){const r=reviews[e.case_id];if(!r)return'';return `<div class="review"><strong>SOURCE REVIEW: ${esc(r.verdict.replace('_',' '))}</strong><div>${esc(r.rationale)}</div><div class="ref">${esc(r.source)}</div></div>`}
+function conflictState(e){return e.pair_conflict??(e.real_issue===true?'conflict':e.real_issue===false?'no_conflict':'underdetermined')}function edgeBlock(e,other){const r=reviews[e.case_id],state=conflictState(e),sides=(e.sides||[]).map(s=>`<div class="side"><div class="sideh">${esc(s.document_id||s.claim_id)}</div>${(s.excerpts||[]).map(x=>`<div class="ex">[${esc(x.file)}:${x.start}-${x.end}] ${esc(x.text)}</div>`).join('')}</div>`).join(''),grounding=(e.side_grounding||[]).map(g=>`<div class="side"><div class="sideh">${esc(g.claim_id)} · ${esc(g.state)}</div><div class="ctxnote">${esc(g.rationale)}</div></div>`).join(''),context=e.context_relation?Object.entries(e.context_relation).map(([k,v])=>`${k}:${v}`).join(' · '):'';return `<div class="r" data-id="${esc(other.id)}"><span class="dot" style="background:${RELC[e.rel]||'#666'}"></span><span class="rt">${esc(e.rel)}</span><span class="rn">${esc(other.label)}</span></div>${e.resolution?`<div class="resblock">${reviewBlock(e)}<span class="pill ${state==='conflict'?'real':'ctx'} ${r?'raw':''}">${esc(e.resolution)} · pair: ${esc(state)}</span><div class="rationale">${esc(e.resolution_rationale)}</div>${context?`<div class="ctxnote">${esc(context)}</div>`:''}${e.context_note?`<div class="ctxnote">${esc(e.context_note)}</div>`:''}${grounding}${sides?`<div>${sides}</div>`:''}</div>`:''}`}
+function renderNode(n){const edges=E.filter(e=>e.s===n||e.t===n).sort((a,b)=>a.rel.localeCompare(b.rel));panel.innerHTML=`<h2>Claim</h2><div class="stmt">${esc(n.statement)}</div>${n.source_excerpt?`<div class="src">${esc(n.source_excerpt)}<div class="ref">${esc(n.source_excerpt_ref)}</div></div>`:''}<div class="kv"><span class="k">document</span><span class="v">${esc(n.document)}</span><span class="k">neighbourhood</span><span class="v">${esc(n.neighbourhood)}</span><span class="k">predicate</span><span class="v">${esc(n.predicate)}</span><span class="k">modality</span><span class="v">${esc(n.modality)}</span><span class="k">polarity</span><span class="v">${esc(n.polarity)}</span><span class="k">relations</span><span class="v">${edges.length}</span></div><h2>Related claims</h2>${edges.map(e=>edgeBlock(e,e.s===n?e.t:e.s)).join('')}<div class="hint">Raw model adjudications are preserved. A green SOURCE REVIEW block is a separate human overlay and overrides neither source nor artifact.</div>`;panel.querySelectorAll('.r').forEach(el=>el.onclick=()=>{const n=byId[el.dataset.id];if(n){sel=n;renderNode(n)}})}
+function renderOverview(){const rh=Object.entries(comp.relations).sort((a,b)=>b[1]-a[1]);panel.innerHTML=`<h2>Component #${comp.id}</h2><div class="stmt">${comp.node_count} claims across ${comp.documents.length} documents, joined by ${comp.edge_count} non-incomparable relations.</div>${comp.raw_flags?`<div class="review"><strong>${comp.raw_flags} raw model flag reviewed</strong><div>${comp.human_false_positives} overturned as false positive.</div></div>`:''}<h2 style="margin-top:15px">Documents</h2><div class="docs">${comp.documents.map(d=>`<span class="doc">${esc(d)}</span>`).join('')}</div><h2 style="margin-top:15px">Relations</h2><div class="kv">${rh.map(([k,v])=>`<span class="k"><span class="sw" style="background:${RELC[k]||'#666'}"></span>${esc(k)}</span><span class="v">${v}</span>`).join('')}</div><h2>Claims</h2><div class="component-list">${N.slice().sort((a,b)=>a.document.localeCompare(b.document)).map(n=>`<div class="component-row" data-id="${esc(n.id)}"><span>${esc(n.modality)}</span><span>${esc(n.predicate)}</span><span>${esc(n.label)}</span></div>`).join('')}</div>`;panel.querySelectorAll('.component-row').forEach(el=>el.onclick=()=>{const n=byId[el.dataset.id];sel=n;renderNode(n)})}
+function updateLegend(){const rels=[...new Set(E.map(e=>e.rel))];$('legend').innerHTML=rels.map(r=>`<span><i class="sw" style="background:${RELC[r]||'#666'}"></i>${esc(r)}</span>`).join('')}
+function chooseOffset(d){const i=Math.max(0,visibleIds.indexOf(comp.id));load(visibleIds[(i+d+visibleIds.length)%visibleIds.length])}
+select.onchange=()=>load(select.value);$('prev').onclick=()=>chooseOffset(-1);$('next').onclick=()=>chooseOffset(1);$('largest').onclick=()=>{visibleIds=DB.components.map(c=>c.id);fillOptions();load(0)};$('flagged').onclick=()=>{const c=DB.components.find(c=>c.raw_flags);if(c){visibleIds=DB.components.map(c=>c.id);fillOptions();load(c.id)}};$('overview').onclick=renderOverview;
+search.oninput=()=>{const q=search.value.trim().toLowerCase();visibleIds=!q?DB.components.map(c=>c.id):DB.components.filter(c=>c.search_text.includes(q)).map(c=>c.id);fillOptions(visibleIds);if(visibleIds.length)load(visibleIds[0])};
+$('subtitle').textContent=`285 present-truth documents · source @${String(DB.meta.source_sha).slice(0,8)} · raw neural census with source-review overlay`;
+const rawConflictCount=DB.edges.filter(e=>conflictState(e)==='conflict').length,reviewedFalsePositiveCount=Object.values(reviews).filter(r=>r.verdict==='false_positive').length;$('stats').innerHTML=`<span class="stat"><b>${DB.meta.total_claims.toLocaleString()}</b> total claims</span><span class="stat"><b>${DB.nodes.length.toLocaleString()}</b> connected</span><span class="stat"><b>${DB.edges.length.toLocaleString()}</b> relations</span><span class="stat"><b>${DB.components.length.toLocaleString()}</b> components</span><span class="stat warn"><b>${rawConflictCount}</b> raw pair conflicts</span><span class="stat ok"><b>${reviewedFalsePositiveCount}</b> source-reviewed false positives</span><span class="stat">reported model cost <b>$${DB.meta.usage.total.cost_usd.toFixed(2)}</b></span>`;
+fillOptions();resize();const flagged=DB.components.find(c=>c.raw_flags);load(flagged?.id??0);loop();
+</script></body></html>

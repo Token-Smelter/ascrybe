@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 import fs from './readonly-guard.mjs';
-import { classifyDocument } from './document-mode.mjs';
 import { defaultOutputRoot, registerScanRoot } from './readonly-guard.mjs';
 import path from 'node:path';
-import extractors, { extractorAvailabilityReceipt, extractorExclusionReceipts, textExtensionRegistrationReceipt } from './extractors/index.mjs';
+import { extractorAvailabilityReceipt, extractorExclusionReceipts, textExtensionRegistrationReceipt } from './extractors/index.mjs';
 import { classifyExcludedDirName, describeScopeExclusions, factKey, isIgnoredPath, linkedWorktreeGitdir, normalizePath, parseArgs, readEstateMapIgnore, sha256, stableStringify, walk, writeJson, writeJsonArray, writeJsonLines } from './lib.mjs';
+import { buildExtractionRegistry, extractionTelemetry, planFileScopeExtraction, prepareFileEntry } from './file-extraction-adapter.mjs';
 
-const HELP=`Usage: node tools/estate-map/extract.mjs <estate-dir> [--repo <name>] [--out <dir>] [--no-default-scope-exclusions] [--print-scope-exclusions]
+const HELP=`Usage: node tools/estate-map/extract.mjs <estate-dir> [--repo <name>] [--out <dir>] [--no-default-scope-exclusions] [--print-scope-exclusions] [--cache-root <dir>] [--cache-mode reuse|full]
 Read immediate-child directory components and emit deterministic JSONL facts. No source code is executed.
 
   --no-default-scope-exclusions  Disable the default-on scan-scope exclusion set
                                  (vendored dependencies, build artifacts, duplicate
                                  worktrees) and reproduce the prior scan behaviour.
-  --print-scope-exclusions       Print the ACTIVE exclusion set as JSON and exit.`;
-const secretPattern=/(?:password|passwd|secret|api[_-]?key|token)["']?\s*[=:]\s*(?:["'][^"']+["']|[^\s,}]+)/i;
+  --print-scope-exclusions       Print the ACTIVE exclusion set as JSON and exit.
+  --cache-root <dir>             Reuse/publish per-file/extractor units in this shared cache
+                                 (tools/file-extraction-adapter.mjs). Omitted: every run
+                                 recomputes every unit, exactly as before this flag existed.
+  --cache-mode reuse|full        Default reuse. full forcibly disables reuse even when
+                                 --cache-root is given: every unit is recomputed and no cache
+                                 read/write occurs (the forced-uncached reference mode).`;
+// Redaction (withholdSecrets/redactLines) and document-mode classification now live in
+// tools/file-extraction-adapter.mjs -- the ONE copy this module and tools/delta-update-run.mjs
+// both call, so a secret-withholding or document-classification edit invalidates cached units on
+// both paths identically instead of drifting between two hand-copied implementations.
 const SAMPLE_CAP=100;
 const compare=(a,b)=>a.localeCompare(b);
 
@@ -130,12 +139,29 @@ const scannerSourceClosure = async () => {
   return sha256(stableStringify({ sources, extractor_availability: extractorAvailabilityReceipt }));
 };
 
-export async function extractEstate(estate,out,{repo,strict=false,defaultScopeExclusions=true,catalog_globs: catalogGlobs=[]}={}) {
+export async function extractEstate(estate,out,{repo,strict=false,defaultScopeExclusions=true,catalog_globs: catalogGlobs=[],cache={},collectPlans=false}={}) {
   if (!Array.isArray(catalogGlobs)) throw new Error('catalog_globs must be an array');
-  // The single chokepoint where a scan root becomes known. Registering HERE (rather than in
-  // the CLI block) covers every caller: the CLI, loop-driver's iteration, and the
-  // multi-estate harness. From this point on, any write under `estate` by any estate-map
-  // tool in this process fails with ASCRYBE_READONLY_VIOLATION.
+  // SHARED PATH: the same production-extractor registry and per-unit reuse kernel
+  // tools/delta-update-run.mjs uses (tools/file-extraction-adapter.mjs). `cache.root` is opt-in
+  // (omitted = no cache_root = every unit always recomputed, byte-identical to this function's
+  // pre-adapter behaviour); `cache.mode:'full'` forcibly disables reuse even when a root is given.
+  const cacheRoot=cache.root??null,cacheMode=cache.mode??'reuse';
+  const registry=buildExtractionRegistry({catalog_globs:catalogGlobs});
+  // [ACTUAL-SCANS] The registry's own scan-invocation recorder — fresh for this run
+  // (buildExtractionRegistry builds a new one every call). Snapshotting its count around each
+  // per-repository planFileScopeExtraction() call below gives a REAL per-repository invocation
+  // delta, grounded at the extractor.scan() callsite itself, never inferred from dispositions.
+  const scanRecorder=registry.scanInvocations;
+  const cacheTelemetry=[];
+  // `collectPlans` is opt-in and purely additive: when false (every existing caller), the return
+  // shape and every write this function performs are byte-identical to before this option existed.
+  // When true (tools/eval/delta-shape-eval.mjs, the only caller so far), each repository's REAL
+  // per-unit extraction plan/receipts (the actual scan-invocation record planFileScopeExtraction
+  // already produced below, not a re-derived or inferred count) is retained and returned so a
+  // caller can compare real observation_id/record_digest/disposition data across two full runs of
+  // this SAME producer without re-implementing any part of its scanning, redaction, or routing.
+  const perRepositoryPlans=collectPlans?[]:null;
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   registerScanRoot(estate,{registeredBy:'extract.mjs estate argument'});
   const ignorePrefixes=await readEstateMapIgnore(estate);
   const discovered=await discoverRepositories(estate,{ignorePrefixes,defaultScopeExclusions}),selected=(discovered.selections||discovered.repos.map(value=>({...value,status:'ready'}))).filter(value=>!repo||value.name===repo);if(!selected.length)throw new Error(`No repositories found${repo?` matching ${repo}`:''}`);
@@ -146,25 +172,42 @@ export async function extractEstate(estate,out,{repo,strict=false,defaultScopeEx
     const status={repo:item.name,status:'failed'};statuses.push(status);
     try{
       const {files,skipped,skipCounts,skipSamples,scopeExclusions}=await walk(item.path,{ignorePrefixes,estateRelativeRoot:item.name,defaultScopeExclusions});const counts={},parseErrors=[],facts=[],secretSamples=[];let parseErrorCount=0,secretCount=0;
+      const fileEntries=[];
       for(const absolute of files){
         const file=normalizePath(path.relative(item.path,absolute)),lang=language(file);if(lang)counts[lang]=(counts[lang]||0)+1;
         let text;try{text=await fs.readFile(absolute,'utf8');}catch(error){parseErrorCount++;manifestBlockers.push({ path: normalizePath(path.relative(estate, absolute)), reason: `unreadable: ${error.message}` });if(parseErrors.length<SAMPLE_CAP)parseErrors.push({file,error:error.message});continue;}
         manifestEntries.push({ path: normalizePath(path.relative(estate, absolute)), content_digest: sha256(text), source_identity: { repo: item.name, component_root: normalizePath(path.relative(estate, item.path)) || '.' } });
-        const lines=text.split(/\r?\n/),safeLines=lines.map((line,index)=>{if(!secretPattern.test(line))return line;secretCount++;if(secretSamples.length<SAMPLE_CAP)secretSamples.push({file,line:index+1});return'';});
-        const extractorErrors=[];
-        // What a document IS, decided once per file by the harness so every extractor can stamp
-        // its facts with the standing of the source rather than each one classifying separately.
-        const documentMode=/\.mdx?$/i.test(file)?(()=>{const held=classifyDocument({path:file,text});return{mode:held.mode,basis:held.basis,archived:held.archived,adjudication_frame:held.adjudication_frame};})():null;
-        // `file` is relative to its own repository; a Document is addressed relative to the
-        // estate. Those coincide only when the estate IS one repository rooted at the estate root,
-        // and the map between them lives in this manifest and never travels into the code graph --
-        // so a projection could not join a section to its document in a multi-repository estate and
-        // had nothing to say so. The fact carries its own document address instead.
+        // Preserve source witnesses; do not infer authority from naming conventions alone.
         const documentPath=normalizePath(path.relative(estate,absolute));
-        const ctx={repo:item.name,file,document_path:documentPath,catalog_globs:catalogGlobs,document:documentMode,parseErrors:extractorErrors,fact:(kind,line,data)=>({kind,repo:item.name,file,document_path:documentPath,line,...data})};
-        for(const extractor of extractors)if(extractor.filePattern.test(file))try{facts.push(...extractor.scan(safeLines,ctx));}catch(error){extractorErrors.push({file,extractor:extractor.kind,error:error.message});}
-        parseErrorCount+=extractorErrors.length;for(const error of extractorErrors)if(parseErrors.length<SAMPLE_CAP)parseErrors.push(error);
+        // ONE redaction + document-classification pass per file (tools/file-extraction-adapter.mjs),
+        // never re-run per matching extractor -- otherwise secretCount would scale with how many
+        // extractors route to a file instead of counting each secret once.
+        const prepared=prepareFileEntry({repository:item.name,normalized_path:file,text,document_path:documentPath});
+        secretCount+=prepared.redaction.secretCount;
+        for(const line of prepared.redaction.secretLineNumbers)if(secretSamples.length<SAMPLE_CAP)secretSamples.push({file,line});
+        fileEntries.push(prepared);
       }
+      // Per-unit reuse kernel shared with `ascrybe update` (tools/file-extraction-adapter.mjs
+      // planFileScopeExtraction wraps tools/delta/planner.mjs planDeltaUnits): a `refused` receipt
+      // is an extractor that threw for this (file, extractor) pair -- reconstructed into the same
+      // {file, extractor, error} shape parseErrors always carried, so diagnostics are unaffected by
+      // whether a unit was produced fresh or reused from a prior run.
+      const scanInvocationsBefore=scanRecorder.count;
+      const extraction=planFileScopeExtraction({current_inventory:fileEntries,parent_inventory:[],cache_root:cacheRoot,mode:cacheMode,registry});
+      const actualScanInvocations=scanRecorder.count-scanInvocationsBefore;
+      for(const receipt of extraction.plan.receipts){
+        if(receipt.disposition.kind==='refused'){
+          parseErrorCount++;
+          if(parseErrors.length<SAMPLE_CAP)parseErrors.push({file:receipt.scope.normalized_path,extractor:receipt.extractor.id,error:receipt.disposition.reason});
+          continue;
+        }
+        for(const record of receipt.output.records)facts.push(record.normalized_record);
+      }
+      cacheTelemetry.push({repo:item.name,...extractionTelemetry(extraction.plan,{cache_root:cacheRoot,mode:cacheMode,actual_scan_invocations:actualScanInvocations})});
+      // [ACTUAL-SCANS] `scan_invocations` is the REAL per-repository extractor.scan() invocation
+      // count for tools/eval/delta-shape-eval.mjs and tools/eval/delta-chain-eval.mjs to compare
+      // against independently derived expected work — never a count deduced from receipts.
+      if(perRepositoryPlans)perRepositoryPlans.push({repo:item.name,plan:extraction.plan,scan_invocations:actualScanInvocations});
       const primary_langs=Object.entries(counts).sort((a,b)=>b[1]-a[1]||compare(a[0],b[0])).map(([name,count])=>({name,count}));
       const head=await headSha(item.path);
       // `root` is the component's ESTATE-RELATIVE directory (POSIX, '.' for a
@@ -181,7 +224,7 @@ export async function extractEstate(estate,out,{repo,strict=false,defaultScopeEx
       if(skipped)diagnostics.push({repo:item.name,diagnostic:'files skipped',count:skipped,counts:skipCounts,samples:skipSamples});
       if(Object.keys(scopeExclusions.counts).length)diagnostics.push({repo:item.name,diagnostic:'scan scope exclusions',counts:scopeExclusions.counts,rules:scopeExclusions.rules,samples:scopeExclusions.samples});
       status.scope_exclusion_counts=scopeExclusions.counts;
-      if(secretCount)diagnostics.push({repo:item.name,diagnostic:'secret-like values quarantined',count:secretCount,samples:secretSamples});
+      if(secretCount)diagnostics.push({repo:item.name,diagnostic:'secret-like values withheld, line structure preserved',count:secretCount,samples:secretSamples});
       facts.sort((a,b)=>compare(factKey(a),factKey(b)));await writeJsonLines(path.join(factsDir,`${item.name}.jsonl`),facts);status.status='complete';status.facts=facts.length;status.files_scanned=files.length;
     }catch(error){
       status.error=error.message;
@@ -201,8 +244,19 @@ export async function extractEstate(estate,out,{repo,strict=false,defaultScopeEx
   const scannerConfig={ default_scope_exclusions: defaultScopeExclusions, catalog_globs: [...catalogGlobs].sort(), ignore_prefixes: [...ignorePrefixes].sort(), scope_exclusions: describeScopeExclusions({defaultScopeExclusions}), text_extension_registration: textExtensionRegistrationReceipt };
   const scannedManifest=createScannedManifest({ entries: manifestEntries, blockers: manifestBlockers, scannerConfig, scannerSourceClosureDigest: await scannerSourceClosure() });
   const manifest={schema_version:1,extractor_availability:extractorAvailabilityReceipt,extractor_exclusions:extractorExclusionReceipts,text_extension_registration:textExtensionRegistrationReceipt,scope_exclusions:{...describeScopeExclusions({defaultScopeExclusions}),excluded_totals_by_category:scopeTotals,excluded_total:Object.values(scopeTotals).reduce((sum,count)=>sum+count,0)},repositories:statuses.sort((a,b)=>compare(a.repo,b.repo)),scanned_manifest:scannedManifest,corpus_manifest_digest:scannedManifest.corpus_manifest_digest,closed_world_absence:closedWorldAbsenceStatus(scannedManifest)};await writeJson(path.join(out,'_MANIFEST.json'),manifest);
+  // PARITY: cache/disposition telemetry is a SEPARATE receipt, never mixed into _MANIFEST.json or
+  // the facts themselves -- a cold, warm, and forced-full (--full) run of the same source/config
+  // must write byte-identical facts/<repo>.jsonl and _MANIFEST.json; only this file differs.
+  const cacheSummary={produced:0,reused_exact:0,migrated:0,refused:0};
+  for(const entry of cacheTelemetry)for(const[kind,count]of Object.entries(entry.by_disposition))cacheSummary[kind]=(cacheSummary[kind]||0)+count;
+  // [ACTUAL-SCANS] `actual_scan_invocations` is `scanRecorder.count` — the REAL number of times
+  // THIS process called a real extractor's scan() during this run, grounded at the callsite
+  // (tools/file-extraction-adapter.mjs), never inferred from `scan_calls`/dispositions. Bounded
+  // sample of the raw events (repository/path/extractor/outcome), matching this file's other
+  // SAMPLE_CAP-bounded diagnostics.
+  await writeJson(path.join(out,'_CACHE_TELEMETRY.json'),{schema:'estate-map/file-extraction-telemetry/v1',cache_root:cacheRoot,mode:cacheMode,total_units:cacheTelemetry.reduce((sum,entry)=>sum+entry.total_units,0),scan_calls:cacheTelemetry.reduce((sum,entry)=>sum+entry.scan_calls,0),actual_scan_invocations:scanRecorder.count,scan_invocation_samples:scanRecorder.events.slice(0,SAMPLE_CAP),by_disposition:cacheSummary,by_repository:cacheTelemetry.sort((a,b)=>compare(a.repo,b.repo))});
   const failed=statuses.filter(value=>value.status==='failed');if(strict&&failed.length){const error=new Error(`Extraction failed for ${failed.length} repository(s): ${failed.map(value=>value.repo).join(', ')}`);error.code='PARTIAL_EXTRACTION';throw error;}
-  return {repositories:all.length,diagnostics:diagnostics.length};
+  return {repositories:all.length,diagnostics:diagnostics.length,cache:{root:cacheRoot,mode:cacheMode},...(perRepositoryPlans?{plans:perRepositoryPlans}:{})};
 }
 if(import.meta.url===`file://${process.argv[1]}`){
   const {positional,options}=parseArgs(process.argv.slice(2));
@@ -213,5 +267,8 @@ if(import.meta.url===`file://${process.argv[1]}`){
   // outside the estate -- running `extract.mjs .` from inside a repo wrote its own output
   // into the tree it was scanning. defaultOutputRoot is unconditionally outside.
   const estate=path.resolve(positional[0]),out=options.out?path.resolve(options.out):defaultOutputRoot(estate,'extract');
-  extractEstate(estate,out,{repo:options.repo,strict:options.strict,defaultScopeExclusions}).then(result=>console.log(`Extracted ${result.repositories} repositories to ${out} (scan-scope exclusions ${defaultScopeExclusions?'ON':'OFF'})`)).catch(error=>{console.error(error.message);process.exitCode=1;});
+  const cacheMode=options['cache-mode']||'reuse';
+  if(!['reuse','full'].includes(cacheMode)){console.error(`--cache-mode must be reuse or full (got "${cacheMode}")`);process.exit(1);}
+  const cache={root:options['cache-root']?path.resolve(options['cache-root']):null,mode:cacheMode};
+  extractEstate(estate,out,{repo:options.repo,strict:options.strict,defaultScopeExclusions,cache}).then(result=>console.log(`Extracted ${result.repositories} repositories to ${out} (scan-scope exclusions ${defaultScopeExclusions?'ON':'OFF'}${cache.root?`, cache ${cache.mode} at ${cache.root}`:''})`)).catch(error=>{console.error(error.message);process.exitCode=1;});
 }

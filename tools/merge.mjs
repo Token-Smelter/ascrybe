@@ -107,8 +107,8 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     ambiguities.push({edge_id:edge.id,kind:edge.kind,candidates:edge.candidates,witnesses:edge.witnesses});
     if(fact)unresolved.push({...fact,status:'ambiguous',candidates:edge.candidates});
   };
-  const addUnmatched=(kind,fact)=>{
-    const record={...fact,status:'unresolved',association_kind:kind};
+  const addUnmatched=(kind,fact,reason=null)=>{
+    const record={...fact,status:'unresolved',association_kind:kind,...(reason?{unresolved_reason:reason}:{})};
     unresolved.push(record);
     ambiguities.push({edge_id:`unmatched:${kind}:${repos.get(fact.repo)}:${slug(fact.file)}:${fact.line}`,kind,status:'unmatched',candidates:[],witnesses:[provenance(fact)]});
   };
@@ -164,26 +164,10 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     edges.push({id:`member_of_module:${id}:${module.id}`,kind:'member_of',relation:'resource_module',from:id,to:module.id,status:'resolved',witnesses:[provenance(fact),provenance(module.f)]});
   }
 
-  // HTTP ROUTES. `fact.route` is the MOUNTED path: for the plugin idiom the
-  // extractor reconstructs `/api/plugins/<owner>/<declared>` from the real
-  // registration in src/substrate/pluginContext.mjs and keeps the quoted
-  // `declared_route` beside it, so the node id cannot collide across plugins
-  // (six plugins declare `/health`).
-  //
-  // Every route node carries a `provenance_class` (lib.mjs#classifyProvenance).
-  // The estate's only route nodes used to be five mini-estate FIXTURES, and a
-  // reviewer had no way to tell them from production without reading paths;
-  // fixtures are still carried — classified, not dropped.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const routeFacts=facts.filter(fact=>fact.kind==='http_route');
   const routes=[];
-  // F7 (orientation-test-report.md §7.2). A SYNTHESIZED field must carry the
-  // site that justifies it. `derived_value_producer` facts name where a derived
-  // value is really produced (extractors/http.mjs emits one for `mount_prefix`
-  // at src/substrate/pluginContext.mjs:368); the join below attaches that
-  // file:line to every route node whose mount was reconstructed rather than
-  // quoted. When no producer fact exists in the repo the node carries an
-  // explicit typed refusal instead of a silently missing field — a derived
-  // value with no witness must SAY it has no witness.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const derivedProducers=new Map();
   for(const fact of facts.filter(fact=>fact.kind==='derived_value_producer').sort((a,b)=>factKey(a).localeCompare(factKey(b)))){
     const key=`${fact.repo}\u0000${fact.derived_field}`;
@@ -313,26 +297,158 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     }
   }
 
+  const awsUsage=facts.filter(fact=>fact.kind==='aws_usage');
+  // A target the extractor could ground to a NAME. Older facts spelled an unresolved target as the
+  // literal string 'dynamic', which is a value a real topic could carry, so both are excluded.
+  const namedTarget=fact=>fact.status!=='dynamic'&&!topicTargetAliases(fact.target_name_or_expr).includes('dynamic');
   const topics=resourceFacts.filter(fact=>fact.tf_type==='aws_sns_topic').map(fact=>({f:fact,id:resourceIds.get(resourceKey(fact))}));
   const topicAliases=topic=>[topic.f.name,topic.f.address,topic.f.attributes?.name].filter(Boolean).map(topicRef);
-  for(const fact of facts.filter(fact=>fact.kind==='aws_usage'&&fact.service==='sns'&&fact.op==='publish')){
+  // Bound to the Terraform topic node itself, which exists only where Terraform declared it. A
+  // publish this block cannot place falls through to the general AWS resolver below rather than
+  // becoming an unmatched record here, so a topic declared in CDK is still reachable.
+  const boundToTopicNode=new Set();
+  for(const fact of awsUsage.filter(fact=>fact.service==='sns'&&fact.op==='publish')){
     const targets=topicTargetAliases(fact.target_name_or_expr);
-    let matches=topics.filter(topic=>!targets.includes('dynamic')&&topicAliases(topic).some(alias=>targets.includes(alias)));
+    let matches=topics.filter(topic=>namedTarget(fact)&&topicAliases(topic).some(alias=>targets.includes(alias)));
     let matchedSegment=null;
-    if(!matches.length&&!targets.includes('dynamic')){
+    if(!matches.length&&namedTarget(fact)){
       const tailCandidates=topics.flatMap(topic=>topicAliases(topic).map(alias=>({topic,tail:tailMatches(alias,fact.target_name_or_expr)}))).filter(value=>value.tail);
       const longest=Math.max(0,...tailCandidates.map(value=>value.tail.length));
       matches=[...new Map(tailCandidates.filter(value=>value.tail.length===longest).map(value=>[value.topic.id,value.topic])).values()];
       matchedSegment=tailCandidates.find(value=>value.tail.length===longest)?.tail||null;
     }
     matches=matches.sort((a,b)=>a.id.localeCompare(b.id));
-    if(!matches.length){addUnmatched('publishes_to',fact);continue;}
+    if(!matches.length)continue;
+    boundToTopicNode.add(factKey(fact));
     const edge={id:`publishes_to:${repos.get(fact.repo)}:${slug(fact.target_name_or_expr)}:${slug(fact.file)}:${fact.line}`,kind:'publishes_to',from:repos.get(fact.repo),to:matches.length===1?matches[0].id:null,status:matches.length===1?'resolved':'ambiguous',witnesses:witnessesFor(fact,matches),...(matchedSegment?{matched_segment:matchedSegment}:{})};
     if(matches.length===1)edges.push(edge);else{edge.candidates=matches.map(match=>match.id);addAmbiguous(edge,fact);}
   }
 
+  // AWS RESOURCE RESOLUTION -- cross-file and cross-repository, which is why it is here and not in
+  // the extractor. A per-file extractor can see that `new PublishCommand({ TopicArn: topicArn })`
+  // reads ORDERS_TOPIC_ARN; only merge can see that a CDK stack in another repository binds that
+  // variable to a topic it declares. Three quoted facts, joined:
+  //
+  //   aws_usage           the operation, naming an environment variable or a resource name
+  //   aws_env_binding     `ORDERS_TOPIC_ARN: mergeTopic.topicArn` -- variable to construct
+  //   declaration         `new sns.Topic(...)`, or Terraform's aws_sns_topic via tf_resource
+  //
+  // Every hop is a line in a tracked file and every one of them is carried as a witness, so the
+  // resulting edge can be checked without re-deriving it. Nothing is inferred from a name's
+  // spelling: an operation whose variable no stack binds, or whose binding names a construct this
+  // estate never declares, is refused by name rather than attached to a plausible neighbour.
+  //
+  // The edge runs component to component. A declared resource is not minted as a node here
+  // because a new node kind carries a conservation contract, a projection surface and a display
+  // family with it; the resource is named on the edge and witnessed at its declaring line, which
+  // answers which component owns the thing an operation touches without inventing a subject.
+  const TF_TYPE_SERVICE={aws_sns_topic:'sns',aws_sqs_queue:'sqs',aws_s3_bucket:'s3',aws_dynamodb_table:'dynamodb'};
+  const RESOURCE_KIND={sns:'topic',sqs:'queue',s3:'bucket',dynamodb:'table'};
+  // Which service an environment value's attribute belongs to. This is what says a variable holds
+  // a topic rather than a table -- the attribute is quoted, the variable's name is not evidence.
+  const ATTRIBUTE_SERVICE={topicArn:'sns',topicName:'sns',queueUrl:'sqs',queueArn:'sqs',queueName:'sqs',bucketName:'s3',bucketArn:'s3',tableName:'dynamodb',tableArn:'dynamodb'};
+  const awsDeclarations=[
+    ...facts.filter(fact=>fact.kind==='aws_resource_declaration').map(fact=>({f:fact,service:fact.service,
+      resource_kind:fact.resource_kind,name:fact.declared_name,prefix:fact.declared_name_prefix,binding:fact.binding,
+      label:fact.declared_name||fact.construct_id||fact.binding||fact.resource_kind,source:'aws_cdk'})),
+    ...resourceFacts.filter(fact=>TF_TYPE_SERVICE[fact.tf_type]).map(fact=>({f:fact,service:TF_TYPE_SERVICE[fact.tf_type],
+      resource_kind:RESOURCE_KIND[TF_TYPE_SERVICE[fact.tf_type]],name:fact.attributes?.name||null,prefix:null,binding:null,
+      label:fact.attributes?.name||fact.address,source:'terraform'})),
+  ];
+  // A construct binding is a variable, so it is scoped to the file that declares it.
+  const awsDeclarationsByBinding=new Map();
+  for(const declaration of awsDeclarations.filter(value=>value.binding)){
+    const key=`${declaration.f.repo}\0${declaration.f.file}\0${declaration.binding}`;
+    awsDeclarationsByBinding.set(key,[...(awsDeclarationsByBinding.get(key)||[]),declaration]);
+  }
+  const bindingsByEnvVar=new Map();
+  for(const fact of facts.filter(fact=>fact.kind==='aws_env_binding')){
+    bindingsByEnvVar.set(fact.env_var,[...(bindingsByEnvVar.get(fact.env_var)||[]),fact]);
+  }
+  // An observed name meets a declared one exactly, meets the resource name inside an ARN, or
+  // begins with the literal head of a declared template. The head match requires a non-empty
+  // remainder: a name equal to the head alone says the interpolation contributed nothing, which
+  // is not this resource in some environment but a coincidence of spelling.
+  const declarationMatch=(declaration,fact)=>{
+    const aliases=topicTargetAliases(fact.target_name_or_expr);
+    if(declaration.name&&aliases.includes(topicRef(declaration.name)))return'declared_name_literal';
+    if(declaration.name&&aliases.map(alias=>tailMatches(declaration.name,alias)).some(Boolean))return'declared_name_static_tail';
+    if(declaration.prefix){
+      const prefix=declaration.prefix.toLowerCase();
+      if(aliases.some(alias=>alias.startsWith(prefix)&&alias.length>prefix.length))return'declared_name_template_prefix';
+    }
+    return null;
+  };
+  const awsRefuse=(fact,reason)=>addUnmatched('uses_aws_resource',fact,reason);
+  for(const fact of awsUsage){
+    if(boundToTopicNode.has(factKey(fact)))continue;
+    let candidates=[],basis=null,bindingFacts=[];
+    if(namedTarget(fact)){
+      candidates=awsDeclarations.filter(declaration=>declaration.service===fact.service&&declarationMatch(declaration,fact));
+      if(!candidates.length){awsRefuse(fact,'no_declared_resource_carries_this_name');continue;}
+    }else if(fact.target_env_var){
+      bindingFacts=bindingsByEnvVar.get(fact.target_env_var)||[];
+      if(!bindingFacts.length){awsRefuse(fact,'environment_variable_bound_by_no_declared_stack');continue;}
+      // The attribute the stack read decides the service; a variable bound to a table cannot be
+      // the target of a publish, and saying so is a mismatch rather than a near miss.
+      const typed=bindingFacts.filter(binding=>ATTRIBUTE_SERVICE[binding.attribute]===fact.service);
+      if(!typed.length){awsRefuse(fact,'environment_variable_bound_to_another_service');continue;}
+      bindingFacts=typed;
+      candidates=typed.flatMap(binding=>awsDeclarationsByBinding.get(`${binding.repo}\0${binding.file}\0${binding.binding}`)||[]);
+      if(!candidates.length){awsRefuse(fact,'bound_construct_declared_outside_this_estate');continue;}
+      basis='environment_variable_binding';
+    }else{awsRefuse(fact,'operation_names_no_resolvable_target');continue;}
+    const byRepo=[...new Map(candidates.map(candidate=>[candidate.f.repo,candidate])).values()]
+      .sort((a,b)=>a.f.repo.localeCompare(b.f.repo));
+    const witnessFacts=[...bindingFacts,...byRepo.map(candidate=>candidate.f)];
+    // Which of the three name matches placed the resolved candidate, rather than which placed the
+    // first of several -- a reader checking the edge needs the basis for the edge they were given.
+    basis=basis||declarationMatch(byRepo[0],fact);
+    const edge={id:`uses_aws_resource:${repos.get(fact.repo)}:${fact.service}:${fact.op}:${slug(fact.file)}:${fact.line}`,
+      kind:'uses_aws_resource',from:repos.get(fact.repo),to:byRepo.length===1?repos.get(byRepo[0].f.repo):null,
+      status:byRepo.length===1?'resolved':'ambiguous',service:fact.service,op:fact.op,
+      resource_kind:byRepo[0].resource_kind,resolution_basis:basis,declaration_source:byRepo[0].source,
+      resource_label:byRepo.length===1?byRepo[0].label:null,
+      witnesses:[provenance(fact),...witnessFacts.map(provenance)]};
+    if(byRepo.length===1)edges.push(edge);else{edge.candidates=byRepo.map(candidate=>repos.get(candidate.f.repo));addAmbiguous(edge,fact);}
+  }
+  // A recognised operation the EXTRACTOR could not ground carries its own reason; carrying both
+  // sets under one key keeps "what did not resolve, and at which step" answerable in one place.
+  const awsResourceRefusals=[
+    ...facts.filter(fact=>fact.kind==='aws_usage_refusal').map(fact=>({
+      id:`aws_usage_refusal:${slug(fact.repo)}:${slug(fact.file)}:${fact.line}`,stage:'extraction',
+      service:fact.service,op:fact.op,reason:fact.reason,reason_detail:fact.reason_detail,examined:fact.examined,
+      witnesses:[classifiedProvenance(fact)]})),
+    ...unresolved.filter(record=>record.association_kind==='uses_aws_resource').map(fact=>({
+      id:`aws_resolution_refusal:${slug(fact.repo)}:${slug(fact.file)}:${fact.line}`,stage:'resolution',
+      service:fact.service,op:fact.op,reason:fact.unresolved_reason,reason_detail:null,
+      examined:'declared_resources_and_environment_bindings',witnesses:[classifiedProvenance(fact)]})),
+  ].sort((a,b)=>a.id.localeCompare(b.id));
+
   const configUrls=facts.filter(fact=>['config_value_url','config_value_template'].includes(fact.kind));
-  const clientFacts=facts.filter(fact=>fact.kind==='http_client');
+  // A call site that names a constant instead of a literal is not a call to nowhere. Every
+  // Retrofit annotation in a real client reads `@GET(ApiRoutes.Worlds.WORLDS)`, and the constant
+  // it names is declared in the same repository. Resolving it here -- across files, which no
+  // per-file extractor can do -- turns a named reference into an address, and records that the
+  // address was derived rather than quoted.
+  const constantsByRepo=new Map();
+  for(const fact of facts.filter(fact=>fact.kind==='string_constant')){
+    const byName=constantsByRepo.get(fact.repo)||new Map();
+    if(!byName.has(fact.qualified_name))byName.set(fact.qualified_name,fact);
+    constantsByRepo.set(fact.repo,byName);
+  }
+  const resolveConstantPath=fact=>{
+    if(fact.url_or_path||!fact.path_constant)return fact;
+    const declared=constantsByRepo.get(fact.repo)?.get(fact.path_constant)
+      // A reference may cite a trailing portion of the qualified name it was declared under.
+      ||[...(constantsByRepo.get(fact.repo)||new Map()).entries()].find(([name])=>fact.path_constant.endsWith(name)||name.endsWith(fact.path_constant))?.[1];
+    if(!declared)return fact;
+    const value=String(declared.value||'');
+    if(!value.startsWith('/'))return fact;
+    return {...fact,url_or_path:value,path:value,target_basis:'constant_reference_resolved',
+      path_constant_declared_at:{repo:declared.repo,file:declared.file,line:declared.line}};
+  };
+  const clientFacts=facts.filter(fact=>fact.kind==='http_client').map(resolveConstantPath);
   const repoHints=repo=>{
     const reads=readConfigs.filter(fact=>fact.repo===repo);
     return [
@@ -341,8 +457,18 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
       ...reads.map(fact=>({fact,value:fact.key_name,matchedSegment:allDeclaredConfigs.map(match=>tailMatches(match.f.key_name,fact.key_name)).filter(Boolean).sort((a,b)=>b.length-a.length||a.localeCompare(b))[0]||null})),
     ];
   };
+  // A repository that declares the host it serves needs no name-similarity guess, and outranks
+  // one: the domain is quoted from a tracked file, while token overlap is inference that fails
+  // outright on any repository whose name reduces to no tokens.
+  const declaredHosts=new Map();
+  for(const fact of facts.filter(fact=>fact.kind==='service_hostname')){
+    const held=declaredHosts.get(fact.repo)||new Set();
+    held.add(String(fact.host||'').toLowerCase());
+    declaredHosts.set(fact.repo,held);
+  }
   const hintScore=(value,repo)=>{
     let host='';try{host=new URL(value).hostname.toLowerCase();}catch{host=String(value).toLowerCase();}
+    if(declaredHosts.get(repo)?.has(host))return 3;
     const repoSlug=slug(repo);if(host.includes(repoSlug))return 2;
     return tokens(repo).some(token=>tokens(host).includes(token))?1:0;
   };
@@ -360,7 +486,13 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     return matches.sort((a,b)=>a.id.localeCompare(b.id));
   };
 
-  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&!isTestRepo(fact.repo))){
+  // A reference whose constant was never found has no address to match on. It is a recorded
+  // outcome, not a crash and not a silent drop: the call exists, and what could not be resolved
+  // is named.
+  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&!fact.url_or_path)){
+    addUnmatched('http_call_path_unresolved',fact);
+  }
+  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&fact.url_or_path&&!isTestRepo(fact.repo))){
     const matches=matchingRoutes(fact,repoHints(fact.repo));
     if(!matches.length){addUnmatched('http_call_candidate',fact);continue;}
     const hintFacts=[...new Map(matches.filter(match=>match.hint&&match.hint!==fact).map(match=>[factKey(match.hint),match.hint])).values()];
@@ -369,7 +501,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     if(matches.length===1)edges.push(edge);else{edge.candidates=matches.map(match=>match.id);addAmbiguous(edge,fact);}
   }
 
-  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&isTestRepo(fact.repo))){
+  for(const fact of clientFacts.filter(fact=>fact.client_action!=='base'&&fact.url_or_path&&isTestRepo(fact.repo))){
     const matches=uniqueByRepo(matchingRoutes(fact,repoHints(fact.repo),{allowUnhinted:true}));
     if(!matches.length){addUnmatched('tests_against',fact);continue;}
     const hintFacts=[...new Map(matches.filter(match=>match.hint&&match.hint!==fact).map(match=>[factKey(match.hint),match.hint])).values()];
@@ -417,8 +549,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
   // grouping/presentation attribute of this tool, not a resolution boundary:
   // `plugins/<x>/server/index.mjs` importing `../../../src/foo.mjs` names a
   // real file that lives in a SIBLING component, and resolving only within
-  // the importing file's own component discarded every such import (measured:
-  // 1,289 records / 509 disconnected source nodes on the dashboard estate).
+  // the importing file's own component would discard such imports.
   //
   // The estate index is keyed by ESTATE-RELATIVE path, built from each
   // component's EXPLICIT emitted root (see repoEstateRoots above) joined with
@@ -473,12 +604,9 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
   };
   // SOURCE-OVER-GENERATED-SIBLING (JS/TS extension tie).
   //
-  // Measured problem: 9,465 of 10,662 ambiguous records (88.8%) on a real
-  // estate were a tie between a TypeScript source file and a compiled
-  // JavaScript file COMMITTED NEXT TO IT (`lib/environment.ts` +
-  // `lib/environment.js`, from `import './environment'`). JS_EXTENSION_ORDER
-  // is an enumeration order, not a precedence, so merge saw 2 candidates and
-  // emitted no edge at all.
+  // A TypeScript source and its adjacent compiled JavaScript output can
+  // both satisfy an extensionless import. Enumeration order is not precedence;
+  // resolve this source/output tie explicitly instead of losing the edge.
   //
   // The rule is general, not a path list: among the candidate MODULE FACTS
   // (real `{kind:'module', repo, file, language}` records emitted by
@@ -619,10 +747,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     const declMap=swiftSymbolTable.get(fact.repo)?.get(fact.name)||new Map();
     const allDeclaringFiles=[...declMap.keys()].sort();
     if(!allDeclaringFiles.length){
-      // 0 matches anywhere in this repo's symbol table -> a builtin/stdlib/
-      // framework type (or simply not declared in the scanned tree):
-      // external, per AC-SWIFT-RESOLUTION. Emitted as a real edge (not
-      // dropped) for visibility, and recorded in `unresolved` for audit.
+      // Preserve source witnesses; do not infer authority from naming conventions alone.
       edges.push({id:`references:${fromModule.id}:${slug(fact.name)}:${slug(fact.file)}:${fact.line}`,kind:'references',from:fromModule.id,to:null,status:'external',witnesses:[provenance(fact)]});
       unresolved.push({...fact,status:'external'});
       continue;
@@ -692,7 +817,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
       // dozens of independent Gradle modules (this repo's own module
       // boundaries are invisible to a single-repo fact model, so every
       // same-named redeclaration looks like one giant ambiguity) — up to
-      // ~160 candidates per import observed against the real sw-android
+      // ~160 candidates per import observed against a large real Android estate
       // source. The status stays 'ambiguous' regardless (never guessed);
       // this caps only how many candidate ids are ENUMERATED in the graph
       // (same SAMPLE_CAP-style bounded-evidence precedent extract.mjs
@@ -796,10 +921,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
       }
     }
     if(!allMatches.length){
-      // 0 matches anywhere in this repo's symbol table -> external (System/
-      // Microsoft/NuGet, or simply not declared in the scanned tree).
-      // Emitted as a real edge (not dropped) for visibility, and recorded in
-      // `unresolved` for audit.
+      // Preserve source witnesses; do not infer authority from naming conventions alone.
       edges.push({id:`references:${fromModule.id}:${slug(fact.name)}:${slug(fact.file)}:${fact.line}`,kind:'references',from:fromModule.id,to:null,status:'external',witnesses:[provenance(fact)]});
       unresolved.push({...fact,status:'external'});
       continue;
@@ -889,27 +1011,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     else unresolved.push({...fact,status:'unresolved'});
   }
 
-  // ENVELOPE FLOW (envelope_flow facts -> first-class `envelope_kind` nodes).
-  //
-  // This estate's real coupling is the bus, not the import graph: components
-  // emit and consume envelopes and never import each other. The kind is
-  // modelled as a NODE rather than as component->component edges because
-  //   (a) an emitted-never-consumed / consumed-never-emitted kind is exactly
-  //       the defect worth surfacing, and an orphan has no second endpoint to
-  //       hang a direct edge on;
-  //   (b) fan-in/fan-out becomes plain node degree instead of an O(n*m) mesh;
-  //   (c) a wildcard subscription (`brew.*`) names no single peer;
-  //   (d) it matches the existing vocabulary, where `reads_config` and
-  //       `publishes_to` already point AT the resource node.
-  // Rationale + measurements: tools/estate-map/examples/
-  // envelope-flow-report-2026-07-25.md §3.
-  // MANIFEST SUBSCRIPTION KEYS (defect D15 / instrument fix I4). The loader
-  // accepts two keys and validates one. Both halves are read as FACTS off the
-  // real loader module (extractors/envelopes.mjs emits `manifest_key_validation`
-  // for each `validateEnvelopeEntries(manifest.<key>, …)` call and
-  // `manifest_key_alias` for the `a || b` fallback), so the citation carried
-  // in the graph is the loader's real file:line on this branch rather than a
-  // number transcribed into a comment.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const validatedManifestKeys=new Map();
   for(const fact of facts.filter(fact=>fact.kind==='manifest_key_validation')){
     if(!validatedManifestKeys.has(fact.manifest_key))validatedManifestKeys.set(fact.manifest_key,{validator:fact.validator,at:classifiedProvenance(fact)});
@@ -964,7 +1066,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
   }
   const envelopeKindNames=[...envelopeKindIds.keys()].sort();
   const wildcardMatches=pattern=>{
-    const prefix=`${pattern.slice(0,-1)}`; // 'brew.*' -> 'brew.'
+    const prefix=`${pattern.slice(0,-1)}`; // 'batch.*' -> 'batch.'
     return envelopeKindNames.filter(name=>name.startsWith(prefix));
   };
   for(const fact of envelopeFacts){
@@ -1017,25 +1119,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     void name;
   }
 
-  // CAPABILITY CONTRACTS AND CALLS (capability_flow facts -> first-class
-  // `capability` nodes).
-  //
-  // Instrument defect J1 (acceptance-test-round2.md §5.1): the round-2 map arm
-  // self-reported that it "could not answer" the RFC's central mechanism claim
-  // because "the generated graph has no capability-call node/edge or signature
-  // layer". Envelope kinds and HTTP routes were already nodes; the OTHER
-  // inter-plugin coupling mechanism this estate really uses was absent.
-  //
-  // The capability TYPE is the node, for the same four reasons the envelope
-  // kind is (see above): a required-never-provided or provided-never-called
-  // capability is exactly the defect worth surfacing and an orphan has no
-  // second endpoint; fan-in is node degree; and it matches the vocabulary where
-  // `reads_config` already points AT the declared resource.
-  //
-  // WITNESS PROVENANCE, production-first, exactly as envelope kinds do it: the
-  // estate's `test_echo` and `episodic_memory` capabilities are also registered
-  // by test fixtures, and a node whose leading witness was a fixture would
-  // repeat instrument defect I3 in a new layer.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const capabilityFacts=facts.filter(fact=>fact.kind==='capability_flow');
   const capabilityIds=new Map();
   const capabilityWitnesses=new Map();
@@ -1098,10 +1182,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     node.provide_site_count=providers.length;
     node.require_site_count=requirers.length;
     node.call_site_count=callers.length;
-    // The PROVIDER is the plugin whose code registers the handler —
-    // src/substrate/capabilityRegistry.mjs:37 stores exactly that `pluginName`.
-    // Two plugins registering the same type is a real conflict the registry
-    // throws on at load; the node records both rather than picking one.
+    // Preserve source witnesses; do not infer authority from naming conventions alone.
     node.providers=[...new Set(providers.map(edge=>edge.owner).filter(Boolean))].sort();
     node.declared_providers=[...new Set(of('provides_capability',edge=>edge.source==='manifest').map(edge=>edge.owner).filter(Boolean))].sort();
     node.consumers=[...new Set(requirers.map(edge=>edge.owner).filter(Boolean))].sort();
@@ -1112,31 +1193,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     void type;
   }
 
-  // ---------------------------------------------------------------------------
-  // ORPHAN-CLOSURE EDGES.
-  //
-  // Measured on this estate at 1789aaf6: 259 of 2,289 nodes had degree 0 —
-  // `module` 141, `package` 79, `coverage` 26, `config_key` 11, `sql_object` 2.
-  // Four of those five classes were isolated BY CONSTRUCTION, not by a hard
-  // resolution problem: the merge minted the node from a fact and then never
-  // emitted the edge the SAME fact already witnesses.
-  //
-  //   * `package`     — `consumes_package` points repo -> PRODUCER REPO (or an
-  //                     `external_internal_package` stub). The `package:` node
-  //                     itself was never an endpoint of anything, so all 79
-  //                     were orphans by construction.
-  //   * `coverage`    — minted, never linked to the component it measured.
-  //   * `sql_object`  — minted, never linked to the component that declares it.
-  //   * `config_key`  — only ever reached by a CROSS-REPO `reads_config` match,
-  //                     so a key nothing in another component reads is isolated
-  //                     even though its own declaration site is witnessed.
-  //
-  // Every edge below is derived from a fact the extractor ALREADY emitted and
-  // carries that fact's `file:line` witness. Nothing is inferred: where the
-  // facts genuinely cannot support an edge (per-module coverage attribution,
-  // a bare specifier naming no declared dependency) a refusal record is
-  // emitted instead, naming what was examined — an orphan with a stated reason
-  // beats an orphan.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   const orphanRefusals=[];
   const addOrphanRefusal=(record)=>{orphanRefusals.push(record);};
 
@@ -1242,32 +1299,6 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
       module_path:normalizeModulePath(fact.module_path),provenance_class:classifyProvenance(fact.repo,fact.file),witnesses:[provenance(fact)]});
   }
 
-  // MODULE ORPHAN SPLIT. A module with degree 0 after every resolver has run
-  // is FOUR very different things and the map must not blur them. The first
-  // measured taxonomy — "has imports" vs "has none" — was WRONG, and its own
-  // output said so: 68 of 89 landed in `unresolved_imports_only` and reading
-  // the recorded specifiers showed most were `node:readline` / `node:fs`
-  // only. That is not a resolver defect; nothing in the estate can ever be on
-  // the other end of `node:fs`. The reason codes below separate a real work
-  // list from three kinds of correct absence:
-  //
-  //   * `only_platform_builtin_imports` — every specifier is a Node built-in
-  //     or a Python stdlib module. No in-estate node exists BY DESIGN.
-  //   * `only_undeclared_external_imports` — every specifier is a bare package
-  //     name no scanned manifest declares. On a single-repository estate the
-  //     dominant cause is structural: `extract.mjs` treats each immediate
-  //     child of the estate root as a component, so the ROOT's own
-  //     `package.json` belongs to no component and is never scanned — which
-  //     is why `@mariozechner/pi-coding-agent` resolves to nothing here.
-  //   * `unresolved_relative_imports` — a relative specifier failed. THIS is
-  //     the resolver work list, and the record names the failing specifiers.
-  //   * `genuinely_unreferenced_module` — no import fact at all and nothing
-  //     in-estate imports it. A real FINDING (dead file, leaf config,
-  //     standalone script), not an instrument failure.
-  //
-  // Degree uses the SAME rule analyze-connectivity.mjs uses — only an edge
-  // with a resolved `to` endpoint connects anything — so the census and the
-  // headline isolated-node count can never disagree.
   const moduleDegree=new Map();
   for(const edge of edges){
     if(edge.from==null||edge.to==null)continue;
@@ -1351,6 +1382,19 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     with_auth_marker:routeNodes.filter(node=>node.auth).length,
     refusals:routeRefusals.length,
   };
+  const awsResourceEdges=edges.filter(edge=>edge.kind==='uses_aws_resource');
+  const aws_resource_census={
+    operations:awsUsage.length,
+    declared_resources:awsDeclarations.length,
+    declared_resources_by_source:Object.fromEntries([...awsDeclarations.reduce((map,value)=>map.set(value.source,(map.get(value.source)||0)+1),new Map())].sort((a,b)=>a[0].localeCompare(b[0]))),
+    environment_bindings:[...bindingsByEnvVar.values()].reduce((total,list)=>total+list.length,0),
+    resolved:awsResourceEdges.filter(edge=>edge.status==='resolved').length,
+    ambiguous:awsResourceEdges.filter(edge=>edge.status==='ambiguous').length,
+    cross_component:awsResourceEdges.filter(edge=>edge.status==='resolved'&&edge.from!==edge.to).length,
+    by_resolution_basis:Object.fromEntries([...awsResourceEdges.reduce((map,edge)=>map.set(edge.resolution_basis,(map.get(edge.resolution_basis)||0)+1),new Map())].sort((a,b)=>a[0].localeCompare(b[0]))),
+    refusals:awsResourceRefusals.length,
+    refusals_by_reason:Object.fromEntries([...awsResourceRefusals.reduce((map,record)=>map.set(record.reason,(map.get(record.reason)||0)+1),new Map())].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))),
+  };
   const capability_census={
     capabilities:capabilityNodes.length,
     by_provenance_class:countClasses(capabilityNodes.map(node=>node.primary_witness_class)),
@@ -1361,7 +1405,7 @@ export async function mergeFacts(factsDir,out,{allowPartial=false}={}){
     refusals:capabilityRefusals.length,
     refusals_by_reason:Object.fromEntries([...capabilityRefusals.reduce((map,record)=>map.set(record.reason,(map.get(record.reason)||0)+1),new Map())].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))),
   };
-  let graph={schema_version:1,fact_kind_inventory,nodes:[...nodes.values()].sort((a,b)=>a.id.localeCompare(b.id)),edges:edges.sort((a,b)=>a.id.localeCompare(b.id)),unresolved:unresolved.sort((a,b)=>factKey(a).localeCompare(factKey(b))),route_refusals:routeRefusals,capability_refusals:capabilityRefusals,orphan_refusals:orphanRefusals,orphan_closure_census,manifest_wiring,envelope_witness_census,manifest_subscription_keys,route_census,capability_census,manifest_wiring_census};
+  let graph={schema_version:1,fact_kind_inventory,nodes:[...nodes.values()].sort((a,b)=>a.id.localeCompare(b.id)),edges:edges.sort((a,b)=>a.id.localeCompare(b.id)),unresolved:unresolved.sort((a,b)=>factKey(a).localeCompare(factKey(b))),route_refusals:routeRefusals,capability_refusals:capabilityRefusals,orphan_refusals:orphanRefusals,orphan_closure_census,manifest_wiring,envelope_witness_census,manifest_subscription_keys,route_census,capability_census,aws_resource_refusals:awsResourceRefusals,aws_resource_census,manifest_wiring_census};
   const conservationGates=runConservationGates({facts,graph,surfaces:SUPPORTED_DIAGNOSTIC_PROJECTIONS,scopeGaps:extractionScope.scopeGaps});
   if(!conservationGates.passed){
     const error=new Error(`Estate-map conservation gates failed: BUG=${conservationGates.census.bugs}, PROJECTION=${conservationGates.census.projection_gaps}`);

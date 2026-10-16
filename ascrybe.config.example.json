@@ -3,7 +3,7 @@
   "models": {
     "documentary_claims": {
       "runner": "pi",
-      "name": "openai-codex/gpt-5.6-luna",
+      "name": "<provider/model>",
       "thinking": "off",
       "concurrency": 5,
       "window_bytes": 4000,
@@ -13,7 +13,7 @@
     },
     "code_claims": {
       "runner": "pi",
-      "name": "openrouter/deepseek-v4-flash",
+      "name": "<provider/model>",
       "thinking": "off",
       "concurrency": 5,
       "window_bytes": 4000,
@@ -23,7 +23,7 @@
     },
     "evaluation_arm": {
       "runner": "pi",
-      "name": "openai-codex/gpt-5.6-sol",
+      "name": "<provider/model>",
       "thinking": "high",
       "concurrency": 2,
       "window_bytes": 4000,
@@ -33,7 +33,7 @@
     },
     "evaluation_judge": {
       "runner": "pi",
-      "name": "openai-codex/gpt-5.6-sol",
+      "name": "<provider/model>",
       "thinking": "high",
       "concurrency": 2,
       "window_bytes": 4000,
@@ -49,10 +49,23 @@
   },
   "projection": {
     "batch_size": 500,
-    "default_view": "selected"
+    "default_view": "selected",
+    "estate": "example-estate"
   },
-  "source_repositories": {},
+  "source_repositories": {
+    "billing-ledger": "/srv/estates/example-estate/billing-ledger",
+    "orders-api": "/srv/estates/example-estate/orders-api",
+    "web-storefront": "/srv/estates/example-estate/web-storefront"
+  },
   "catalog_globs": [],
+  "ontology_classification": {
+    "llm_role": "evaluation_judge",
+    "llm_max_input_bytes": 100000,
+    "system_one": {
+      "model": "typesafe/jev-1.13",
+      "credential_env": "OPENROUTER_API_KEY"
+    }
+  },
   "dashboard": {
     "host": "127.0.0.1",
     "port": 8790,

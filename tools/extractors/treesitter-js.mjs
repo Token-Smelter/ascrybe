@@ -127,7 +127,7 @@ function scanCode(lines, ctx, grammar, { onSyntaxError = null, includeLocalSymbo
   const text = lines.join('\n');
   facts.push(ctx.fact('module', 1, { language: grammar.name, end_line: Math.max(1, lines.length) }));
   // F3's prose half: a module that states its own storage root in its header
-  // comment (workOrder.mjs:1) is declaring a persistence target, and the
+  // comment (parcelOrder.mjs:1) is declaring a persistence target, and the
   // orientation test turned on exactly that line.
   facts.push(...scanModuleHeader(lines, ctx));
 

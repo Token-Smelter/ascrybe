@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 // Reject oversized or generated payloads before they enter history.
 //
-// Two blobs in this repository exceed GitHub's 100 MB hard limit (232 MB and 125 MB), and ten
-// exceed its 50 MB warning threshold. Their presence made the published history unpushable, which
-// forced a rewrite, which forked the published line from the local one -- twice. Nothing detected
-// it at commit time; it surfaced only when publishing failed months later.
-//
 // This check runs against the INDEX (what is about to be committed) and against tracked files, so
 // the failure lands on the commit that introduces it, naming the file and the rule it broke.
 import { execFileSync } from 'node:child_process';
@@ -17,8 +12,9 @@ import { resolve } from 'node:path';
 export const MAX_TRACKED_BYTES = 10 * 1024 * 1024;
 export const GENERATED_SUFFIXES = Object.freeze(['.json', '.html', '.jsonl', '.tar.gz']);
 export const GENERATED_ROOTS = Object.freeze(['analysis/archive/', 'analysis/current-evidence/', 'analysis/review-packages/']);
-// The custody pattern: manifests describe payloads by path + digest and are deliberately tracked.
-export const CUSTODY_EXEMPT = Object.freeze(['analysis/run-manifests/']);
+export const PRIVATE_ROOTS = Object.freeze(['analysis/', 'reviews/', '.impeccable/']);
+const PRIVATE_ROOT_RECORD = /^(?:HANDOFF|RESUME|CONTINUATION|FIXIT|INCIDENT|ROLLOUT|TASK-GRAPH|ARCHITECTURE-|EVAL-)|^(?:ESTATE_SHA|SOURCE_SHA|run-census\.sh|corpus-manifest\.json|recursive-pilot-manifest\.json)$|^wide-context.*manifest\.json$|^phase3-.*\.json$/u;
+export const CUSTODY_EXEMPT = Object.freeze([]);
 
 function gitPaths(args) {
   const output = execFileSync('git', args, { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
@@ -42,6 +38,10 @@ export function violations(paths, sizeLookup = sizeOf) {
   for (const path of paths) {
     if (CUSTODY_EXEMPT.some(prefix => path.startsWith(prefix))) continue;
     const bytes = sizeLookup(path);
+    if (PRIVATE_ROOTS.some(prefix => path.startsWith(prefix)) || (!path.includes('/') && PRIVATE_ROOT_RECORD.test(path))) {
+      found.push({ path, bytes, rule: 'private records and machine configuration must live in external custody' });
+      continue;
+    }
     if (bytes > MAX_TRACKED_BYTES) {
       found.push({ path, bytes, rule: `exceeds ${MAX_TRACKED_BYTES / 1048576} MB tracked-file ceiling` });
       continue;
@@ -70,8 +70,7 @@ function main(argv = process.argv.slice(2)) {
     console.error(`  ${(row.bytes / 1048576).toFixed(1)} MB  ${row.path}`);
     console.error(`      ${row.rule}`);
   }
-  console.error('\nGenerated output belongs in ignored custody with a tracked manifest under');
-  console.error('analysis/run-manifests/ recording its path, size and digest. See .gitignore.');
+  console.error('\nGenerated output and private records belong in external custody. See .gitignore.');
   return 1;
 }
 

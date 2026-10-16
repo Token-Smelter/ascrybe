@@ -1,45 +1,4 @@
-// MANIFEST DECLARATIONS LINKED TO WIRING REALITY.
-//
-// WHY THIS EXISTS (instrument defect K3, acceptance-test-round2.md §5.1). The
-// map already carried manifest DECLARATIONS. It could not say whether any of
-// them was actually WIRED. Two round-2 findings live in exactly that gap:
-//
-//   D13 (the round's ONLY map-unique find) — `subscribes_envelopes` is a
-//     declaration, not a handler binding: `validateEnvelopeEntries` checks
-//     `kind` / `version` / `subscriber_id` and never imports a handler
-//     (src/substrate/pluginManifest.mjs:71-93). The real subscription API is
-//     `context.envelopes.subscribe`.
-//   N1 (HIGH, found by NEITHER arm) — `requires_capabilities` entries carry
-//     `optional: true` (plugins/task-intents/plugin.yaml:82-91) and the
-//     consuming wrappers swallow the absence into a `null`
-//     (plugins/task-intents/server/index.mjs:176-178,:180-187), so an absent
-//     provider is indistinguishable from an empty answer.
-//
-// Both are the SAME shape one level up: a declaration is a promise, and the
-// map showed the promise without the delivery. This module emits, for every
-// manifest declaration the extractors see, a wiring-status assessment:
-//
-//   wired             — a real binding site was found in the DECLARING plugin's
-//                       own code, and its file:line is carried.
-//   declared_unwired  — the declaring plugin was searched exhaustively for the
-//                       binding idiom and none matched. Recorded refusal-style:
-//                       `examined` names what was searched and over what.
-//   undeterminable    — a binding site exists but is not groundable (a
-//                       non-literal capability type, a wildcard subscription
-//                       that names no single handler), so neither answer is
-//                       honest. Never silently counted as wired.
-//
-// SCOPE, STATED HONESTLY. "Wired" here means the declaring plugin contains the
-// binding idiom for that subject. It does NOT mean the handler runs, that the
-// provider is present at run time, or that a null-swallowing wrapper does not
-// erase the result — the `optional` and `binding` fields carry the evidence for
-// that question rather than pretending to answer it. The null-guard signal is
-// detected only in the single-line `try { … } catch { … null }` form this
-// estate writes; a multi-line guard is reported as `unguarded`, which is a
-// statement about what was SEEN, and the limitation is recorded here.
-//
-// DETERMINISM. A pure function of the fact stream. No model calls, no network,
-// no second pass over the estate.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 import { pluginDirectoryOwner } from './extractors/capabilities.mjs';
 
@@ -56,25 +15,7 @@ export const MANIFEST_WIRING_REASONS = Object.freeze([
   'declaring_plugin_has_a_refused_registration_site',
 ]);
 
-// WHY `undeterminable` IS NOT A DODGE. The first version of this module called a
-// declaration `declared_unwired` whenever no literal binding site named it. A
-// grounding pass against real source found that verdict FALSE in three
-// independent places, all for the same reason: the estate reaches the bus and
-// the registry through paths a line-oriented reader cannot follow.
-//   plugins/episodic-memory/server/index.mjs:607 subscribes with a `kind`
-//     parameter, iterating its own manifest list — all eight of its declared
-//     subscriptions really are wired;
-//   plugins/task-intents/server/index.mjs:4021-4026 loops
-//     `for (const kind of FAILURE_THRESHOLD_KINDS)` around a subscribe;
-//   plugins/project-registry/server/index.mjs:845 emits
-//     `emit(created ? "bundle.created" : "bundle.updated", …)` — a ternary.
-// So a plugin that contains ANY dynamic site of the same direction gets
-// `undeterminable` with that site cited, never an accusation. The sharper
-// signal survives separately: `subject_occurrences_in_plugin` counts every
-// literal appearance of the subject in the plugin's own code, and the census's
-// `undeterminable_without_any_literal_occurrence` list is the set where the
-// declared subject appears NOWHERE in the declaring plugin — the strongest
-// statement this instrument can make without a false positive.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 const ownerOf = fact => pluginDirectoryOwner(`${fact.repo}/${fact.file}`);
 const witness = fact => ({ repo: fact.repo, file: fact.file, line: fact.line });
@@ -97,12 +38,7 @@ export function deriveManifestWiring(facts) {
   const records = [];
   const add = record => records.push(record);
 
-  // ---- CAPABILITY DECLARATIONS ----------------------------------------
-  // The binding idiom is the code `capabilities.provide(` / `.require(` call in
-  // the declaring plugin — the substrate surface at
-  // src/substrate/pluginContext.mjs:357-364. A manifest entry alone registers
-  // nothing: pluginManifest.mjs shape-checks the list and never imports a
-  // handler, which is D13's insight applied to the capability family.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   for (const declaration of capabilityFacts.filter(fact => fact.source === 'manifest')) {
     const owner = ownerOf(declaration);
     const family = declaration.direction === 'provide' ? 'provides_capability' : 'requires_capability';
@@ -134,7 +70,7 @@ export function deriveManifestWiring(facts) {
         ? `plugin '${owner}' calls capabilities.${declaration.direction}("${declaration.capability_type}", …) at ${bindings.length} site(s)`
         : nonLiteral.length
           ? `plugin '${owner}' has ${nonLiteral.length} capabilities.${declaration.direction}( call(s) whose TYPE argument is not a string literal, so this declaration may or may not be the one they bind; neither 'wired' nor 'declared_unwired' is honest`
-          : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.capability_type}' and contains no capabilities.${declaration.direction}("${declaration.capability_type}", …) call; the manifest list is shape-checked (src/substrate/pluginManifest.mjs:46) and binds no handler`,
+          : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.capability_type}' and contains no capabilities.${declaration.direction}("${declaration.capability_type}", …) call; the manifest list is shape-checked (src/runtime/plugin-context.mjs:46) and binds no handler`,
       declaration: witness(declaration),
       wiring_witnesses: sortWitnesses(bindings.map(witness)),
       undeterminable_witnesses: sortWitnesses(nonLiteral.map(witness)),
@@ -196,7 +132,7 @@ export function deriveManifestWiring(facts) {
           ? `'${declaration.envelope_kind}' is a prefix wildcard; it names no single kind, so no single binding site can confirm or refute it`
           : dynamic.length
             ? `plugin '${owner}' has ${dynamic.length} ${declaration.direction} site(s) whose kind is not a literal (a loop over a kind list, a shorthand \`{ kind }\`, a ternary), so this declaration may be bound through one of them; neither 'wired' nor 'declared_unwired' is honest`
-            : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.envelope_kind}', contains no ${bindingIdiom ? '`context.envelopes.subscribe`' : 'emit'} site for it, and has no ${declaration.direction} site with a non-literal kind that could reach it; src/substrate/pluginManifest.mjs:71-93 validates kind/version/subscriber_id and never imports a handler, so the declaration alone binds nothing`,
+            : `plugin '${owner}' declares ${declaration.manifest_key} '${declaration.envelope_kind}', contains no ${bindingIdiom ? '`context.envelopes.subscribe`' : 'emit'} site for it, and has no ${declaration.direction} site with a non-literal kind that could reach it; src/runtime/plugin-context.mjs:71-93 validates kind/version/subscriber_id and never imports a handler, so the declaration alone binds nothing`,
       declaration: witness(declaration),
       wiring_witnesses: sortWitnesses(bindings.map(witness)),
       undeterminable_witnesses: sortWitnesses([...related, ...dynamic].map(witness)),
@@ -205,12 +141,7 @@ export function deriveManifestWiring(facts) {
     });
   }
 
-  // ---- HTTP ROUTE DECLARATIONS ----------------------------------------
-  // The manifest's `http_routes:` block is the declaration ceiling
-  // registerRoute() enforces; the real registration is `context.http.route`
-  // (src/substrate/pluginContext.mjs:366-370), which the route extractor
-  // already grounds to a MOUNTED path. A declaration is wired when a real
-  // registration with the same method mounts at the same path.
+  // Preserve source witnesses; do not infer authority from naming conventions alone.
   for (const declaration of routeDeclarations) {
     const owner = ownerOf(declaration);
     const matches = routeFacts.filter(fact => fact.owner === owner && fact.method === declaration.method && fact.route === declaration.path);
@@ -262,12 +193,7 @@ export function manifestWiringCensus(records) {
     by_family: countBy(records.map(record => record.declaration_family)),
     by_reason: countBy(records.filter(record => record.reason).map(record => record.reason)),
     declared_unwired: byStatus('declared_unwired').map(record => record.id),
-    // The sharpest statement this instrument can make WITHOUT a false positive:
-    // the declaring plugin reaches the bus/registry through a path this reader
-    // cannot follow, AND the declared subject appears nowhere in that plugin's
-    // own code. `recipe-engine` / `brew.awaiting_human_verdict` is the case this
-    // list was built to surface — its own manifest comment at
-    // plugins/recipe-engine/plugin.yaml:106 says "emit site pending".
+    // Preserve source witnesses; do not infer authority from naming conventions alone.
     undeterminable_without_any_literal_occurrence: byStatus('undeterminable')
       .filter(record => !record.subject_occurrences_in_plugin).map(record => record.id),
     // N1's exact shape, surfaced as data: an OPTIONAL requirement whose binding

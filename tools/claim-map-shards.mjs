@@ -5,7 +5,7 @@ import {
 import { once } from 'node:events';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
-import { stableCanonicalSha256, stableStringify } from './lib.mjs';
+import { stableCanonicalSha256, stableStringify, isSourceIdentity } from './lib.mjs';
 
 export const CLAIM_MAP_SHARD_MANIFEST_SCHEMA = 'estate-map/claim-evidence-shards/v1';
 const canonical = value => stableStringify(value).trim();
@@ -120,7 +120,7 @@ export function validateClaimMapShardManifest(manifest) {
     || manifest.source_schema !== 'estate-map/claim-evidence-map/v1'
     || !/^[0-9a-f]{64}$/u.test(manifest.source_map_digest || '')
     || typeof manifest.project?.id !== 'string' || !manifest.project.id
-    || !/^[0-9a-f]{40}$/u.test(manifest.project?.sha || '')
+    || !isSourceIdentity(manifest.project?.sha)
     || !manifest.policy || !manifest.coverage) {
     fail('CLAIM_MAP_SHARD_MANIFEST_INVALID', 'claim-map shard manifest is incomplete');
   }

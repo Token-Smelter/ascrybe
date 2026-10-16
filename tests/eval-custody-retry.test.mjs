@@ -69,7 +69,7 @@ test('retry is bounded to typed provider failures and records every attempt', as
     call: async () => {
       calls += 1;
       if (calls === 1) {
-        const error = new Error('No API key found for openai-codex');
+        const error = new Error('No API key found for invented-provider');
         error.code = 'EVAL_MODEL_UNAVAILABLE';
         throw error;
       }
@@ -80,7 +80,7 @@ test('retry is bounded to typed provider failures and records every attempt', as
   assert.deepEqual(events.map(event => [event.attempt, event.outcome, event.error_class]), [[1, 'error', 'model_unavailable'], [2, 'success', undefined]]);
   calls = 0;
   const deterministic = await retryModelCall({ attempts: 3, backoff_ms: 0, sleep: async () => {}, call: async () => {
-    calls += 1; throw new Error('No API key found for openai-codex');
+    calls += 1; throw new Error('No API key found for invented-provider');
   } });
   assert.equal(calls, 1);
   assert.equal(deterministic.error_class, 'deterministic');

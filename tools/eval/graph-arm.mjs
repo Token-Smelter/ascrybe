@@ -125,7 +125,7 @@ export function filterBenchmarkRows(value, policy) {
     for (const [key, child] of Object.entries(input)) {
       const filteredChild = visit(child);
       if (filteredChild !== undefined) result[key] = filteredChild;
-      else if (['node', 'target', 'focal_node', 'envelope'].includes(key)) filteredPrimaryNode = true;
+      else if (['node', 'target', 'focal_node', 'envelope', 'container'].includes(key)) filteredPrimaryNode = true;
     }
     return filteredPrimaryNode ? undefined : result;
   };
@@ -216,11 +216,6 @@ export function createGraphArm({ runtime_config_path, query_script, environment 
   return Object.freeze({ schema: schema(visibleCommands), tools: Object.freeze({
     async estate_query({ command, arguments: input = {}, ...rest } = {}) {
       if (!commands.has(command)) throw new Error('unsupported graph command');
-      // Models emit the documented nested form most of the time and occasionally flatten it to
-      // {command, term, limit}. The intent is unambiguous either way, and rejecting the flat form
-      // spends a paid turn to teach syntax: in one 20-question run it produced 34 failed calls and
-      // 34 abstentions, which measured this convention rather than the map. Accept both shapes and
-      // validate identically afterwards; genuinely missing arguments still fail in argumentsFor.
       const supplied = Object.keys(rest).length && !Object.keys(input).length ? rest : input;
       const argv = [query_script, '--runtime-config', runtime_config_path, '--view', 'selected', command, ...argumentsFor(command, supplied)];
       const result = await execute(process.execPath, argv, { encoding: 'utf8', env: environment, maxBuffer: transport_limit_bytes });

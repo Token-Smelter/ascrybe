@@ -12,7 +12,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # Full history: the design-authority gate compares each document with the commit that last changed it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,6 +35,7 @@ jobs:
           esac
       - run: npm run verify:falsifiers
       - run: node scripts/check-artifact-hygiene.mjs --tracked
+      - run: node scripts/check-design-authority.mjs
       # The bundle is what consumers install; a version match with a changed data model is exactly
       # the drift a version check alone misses.
       - run: npm run skill:bundle

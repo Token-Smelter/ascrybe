@@ -1,97 +1,43 @@
 # Before a pull request
 
-**Opinion: the test that proves your fix must be one the bug could not have passed.** Everything
-below follows from that, and every rule here was bought by shipping — or nearly shipping — a
-breakage this repository actually produced.
+A change is ready only when its checks pass, its claims match measured evidence, and its entire public tree reveals nothing about private mapped estates.
 
-## Two hard rules
+## Privacy sweep
 
-### 1. Nothing about a mapped estate goes in this repository
+Use invented names in code, fixtures, examples, comments, screenshots, commit messages, and review descriptions. A private module path or a measured estate census is confidential even without the estate's name.
 
-Ascrybe maps private repositories. **Their contents are not ours to publish**, and they leak in
-ways that do not look like leaks:
+Sweep the whole tree, not just the diff, for:
 
-- **Examples and documentation.** A path like `design/features/<real-feature>/DESIGN.md` names a
-  private feature. Use invented names. This document's own first draft used a real plugin name in
-  an example of identifier grounding.
-- **Test fixtures.** A fixture built from a real estate carries its module names, routes and
-  capabilities.
-- **Analysis and evidence.** Anything derived from a mapped estate describes it. A tracked
-  analysis document once linked a live S3 bucket serving rendered maps of a private codebase.
-- **Screenshots and rendered artifacts.** A dashboard screenshot shows real node labels.
-- **Commit messages and PR descriptions.** Naming a private module to explain a fix publishes it
-  just as surely as committing the file.
+- Estate names and distinctive module, plugin, capability, feature, and route names.
+- Hostnames, model gateways, internal DNS, and infrastructure-specific ports.
+- Cloud bucket names, ARNs, account identifiers, and region-qualified service URLs.
+- Emails, non-loopback IPs, concrete home-directory paths, private repository names, and credentials.
+- Derived measurements, source pins, screenshots, and historical run records.
 
-**Estate names are the easy half.** A scan for the estates you map by name will miss the class
-that matters more: infrastructure. Corporate model gateways sat in this repository as exported
-constants for weeks, through several reviews, because every scan looked for a company name and
-none looked for a hostname. Sweep for all of it:
+Use reserved `example.com`, `.invalid`, or `.test` domains. An invented but registrable domain may identify someone else. Inspect binary assets visually; a text scan cannot clear a screenshot. Keep detailed scan findings and private records in external state, not in this repository.
 
-- **gateway and host identifiers** — model routes, internal DNS, anything shaped `host/model`
-- **cloud identifiers** — bucket names, ARNs, twelve-digit account numbers, region-qualified URLs
-- **addresses** — emails, non-loopback IPs, ports that mean something on your network
-- **machine paths** — `/home/<you>/`, `/Users/<you>/`
-- **estate names** and their distinctive module, plugin, capability and route names
+## Portability
 
-If a real name is load-bearing to an explanation, the explanation needs rewriting, not the name
-redacting. And when you replace one, replace it with something reserved: a blanket rename here
-turned a real domain into an invented one that may belong to somebody, which is a different
-mistake rather than a fix. Use `example.com`, `example.invalid`, `example.test`.
+The shape of one estate is not the shape of every estate. Test different repository counts, languages, frameworks, and identifier widths. Configuration may declare an estate-specific vocabulary; code must not assume it. An unconfigured feature must report a counted, typed refusal or skip, not an empty result presented as a measured fact.
 
-### 2. Records are not edited
+## Evidence
 
-Documents governed by `DESIGN-AUTHORITY-LEDGER.json`, and everything under `analysis/` and
-`reviews/`, are what somebody wrote at a time. A repository-wide rename is not a reason to restate
-them. Two renames in one session rewrote twelve archived files and one governed rollout plan;
-only the second was caught by a gate, because the review package sits outside that gate's scope.
+State the expected outcome before running a check. Prefer conservation identities such as `admitted + refused == proposed` over success counts. Break the fix and verify that its regression test fails. Never treat an unrun check, an unavailable corpus, or a missing service as a pass.
 
-## Verifying a fix
+## Records and public documentation
 
-**Find a number the bug could not have produced.** This is the whole discipline.
+Private studies, analysis, and reviews remain in external custody and are not rewritten to fit a product rename. The public documentation ledger has a separate, explicit scope. Commit changed public documents before rebinding their hashes with `npm run authority:bridge`; the gate checks coverage, bytes, and available public Git provenance.
 
-A containment fix reported **zero refusals** and was wrong: it had minted a parallel set of
-documents at the wrong addresses, and every section attached to the orphans. Zero refusals was
-producible *by the defect*. The number that would have caught it immediately was the document
-count — 2,308 for 1,154 files.
-
-So, in order:
-
-1. **State what the number would be if the fix worked, before running it.** Then run it. A metric
-   you interpret afterwards will accommodate whatever it finds.
-2. **Prefer a conservation identity to a success count.** `admitted + refused == proposed` cannot
-   be satisfied by a bug that loses rows; `refused == 0` can.
-3. **Run it against real data, not only a fixture.** Extractors were once verified by calling them
-   directly while the pipeline that feeds them admitted no markdown at all. Every number was real
-   and none of it ran.
-
-## Verifying the test
-
-**A test that cannot fail proves nothing.** Before opening a PR, break the fix and watch the test
-go red. If it stays green, the test is a tautology — one written in this repository asserted
-against a locally constructed array rather than the code under test, and would have passed whether
-or not the fix worked.
-
-`npm run verify:falsifiers` exists for this class and should be run, not assumed.
-
-## The checklist
+## Checklist
 
 ```bash
-node scripts/test-fast.mjs                        # behaviour
-npm run verify                                    # the registered gate set ran
-npm run verify:falsifiers                         # the tests can still fail
-node scripts/check-artifact-hygiene.mjs --tracked  # nothing oversized or generated
-node scripts/check-design-authority.mjs            # no record was rewritten
-ascrybe skill bundle && ascrybe skill verify       # the bundle matches the surface
-git diff --stat -- analysis reviews                 # must be empty
+node scripts/test-fast.mjs
+npm run verify
+npm run verify:falsifiers
+node scripts/check-artifact-hygiene.mjs --tracked
+node scripts/check-design-authority.mjs
+ascrybe skill bundle
+ascrybe skill verify
 ```
 
-Then, by hand, because no gate can check them:
-
-- **Did I state the expected number before measuring it?**
-- **Could the bug have produced the number I am treating as proof?**
-- **Does the diff, including the commit message, name anything from a mapped estate?**
-- **If a config field a vendor can reinterpret is touched, is it pinned rather than left unset?**
-
-That last one is not hypothetical: `thinking: null` meant the flag was never passed, so a
-provider's default decided, and when that default moved it multiplied a corpus run's cost by five
-with nothing in the repository able to notice.
+Before publishing, inspect the candidate tree and commit messages, confirm that no private history is included, and obtain the required operator review. Passing automated checks does not replace that review.

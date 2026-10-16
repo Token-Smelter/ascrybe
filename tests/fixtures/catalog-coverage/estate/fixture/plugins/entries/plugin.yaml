@@ -1,5 +1,5 @@
 requires_capabilities:
-  - type: brew
+  - type: batch
     version: "^1"
 name: entries
 version: 1

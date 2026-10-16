@@ -1,38 +1,4 @@
-// F2 — YAML CATALOG RECORDS BEYOND `plugin.yaml` (orientation-test-report.md §7.2 P0).
-//
-// WHY THIS EXISTS. §7.2 F2: "The map covers plugin manifests well and has ZERO
-// records for `potions/**/*.yaml`, `work-types/*.yaml` and `checks/index.yaml`.
-// The map arm's own census is the witness: *'Exact-term census over all
-// /tmp/or-map/facts/*.jsonl returns zero multi-model-review records.'* An entire
-// configuration namespace — the one that defines what the system *runs* — is
-// invisible."
-//
-// Verified at the base of record: `extractors/envelopes.mjs` and
-// `extractors/capabilities.mjs` both gate on a `plugin.yaml` basename, so every
-// OTHER YAML file in the estate was admitted to the walk (the `.yaml` text
-// extension is registered) and then read by nothing.
-//
-// WHAT IT EXTRACTS.
-//   yaml_document  one per YAML file: its declared `api_version` / `id` /
-//                  `name` / `version` when present, its top-level key list, and
-//                  the leaf count. This is the record that makes a Potion or a
-//                  work-type ADDRESSABLE by id at all.
-//   yaml_record    one per LEAF SCALAR, keyed by its full path
-//                  (`delivery.evidence.path_template`, `recommended_patterns[0]`)
-//                  and witnessed at the scalar's own real line.
-//
-// WHAT IT REFUSES, TYPED. A file the YAML parser rejects produces a
-// `yaml_parse_refusal` fact carrying the parser's own message — never a
-// partial best-effort parse. A file whose leaf count exceeds the cap emits
-// `truncated: true` plus the TRUE `leaf_count` on its `yaml_document`, so a
-// reader can never mistake a capped census for a complete one. An anchor/alias
-// or a merge key is recorded at its site as `value_type: 'alias'` rather than
-// resolved, because resolving it here would mint a value the file does not
-// literally contain at that line.
-//
-// READ-ONLY / NO-EXEC: parses text already read and secret-redacted by
-// extract.mjs. `YAML.parseDocument` is a parser, not an evaluator; no custom
-// tags, no JS types, no I/O.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 import YAML from 'yaml';
 
@@ -133,9 +99,7 @@ export default {
       : [];
 
     const facts = [ctx.fact('yaml_document', 1, {
-      // `api_version` is this estate's discriminator for what a YAML file IS
-      // (`example.recipe/v1`, `example.work-type/v1`, plugin manifests have
-      // a numeric one). Reported raw; never inferred from the path.
+      // Preserve source witnesses; do not infer authority from naming conventions alone.
       api_version: YAML.isMap(doc.contents) ? (scalarAt(doc, 'api_version') ?? null) : null,
       doc_id: YAML.isMap(doc.contents) ? (scalarAt(doc, 'id') ?? null) : null,
       doc_name: YAML.isMap(doc.contents) ? (scalarAt(doc, 'name') ?? null) : null,

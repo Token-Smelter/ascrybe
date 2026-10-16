@@ -1,39 +1,17 @@
-// F1 — LITERAL-VALUE RETENTION (orientation-test-report.md §7.2 P0).
-//
-// WHY THIS EXISTS. The orientation test measured the map at 31% on DIRECT
-// (single-lookup) questions — its WORST class, and the counter-intuitive one,
-// because a single lookup is what an index is *for*. The diagnosis in §2.3 is
-// exact: "DIRECT questions in this estate ask *what a thing equals* (a path, a
-// regex, an enum, a required-field list), and the map records **where symbols
-// are, not what they evaluate to**." The map located `resolveDbPath` (Q2),
-// `loadChecksLibrary` (Q3), `validateManifest` (Q15) and `validateInjectWhen`
-// (Q17) at the correct file and line every time and could not state a single
-// one of their values.
-//
-// WHAT IT EXTRACTS. One `literal_value` fact per `const`/`let`/`var` declarator
-// whose right-hand side is statically summarizable: a string, number, boolean,
-// null, regex, array literal, object literal, `new Set([...])` / `new Map([...])`,
-// an `Object.freeze(...)` wrapper around any of those, or a `||` / `??`
-// alternative chain. Every fact is witnessed at the declarator's real line, and
-// every object entry / array item carries its own line.
-//
-// WHAT IT REFUSES, TYPED, RATHER THAN GUESSING. A value this module cannot
-// evaluate from the syntax alone is never approximated. Non-scalar object
-// property values are recorded as `{ value_kind: 'unevaluated' }` entries
-// carrying the raw source text; a declarator whose whole RHS is a call, an
-// await, an identifier or a class is skipped entirely (it mints no fact rather
-// than a wrong one). An array or object over the size cap is emitted with
-// `truncated: true` and the true `entry_count`, never silently shortened.
-// Zero fabrications is the one property this map has that nothing else does;
-// a summarizer that "mostly" evaluates would trade it away.
-//
-// READ-ONLY / NO-EXEC: this module evaluates NOTHING. It reads tree-sitter node
-// text that extract.mjs already read and secret-redacted. There is no `eval`,
-// no `Function`, no `import()` of scanned code, and no filesystem or network
-// I/O anywhere in this file.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
-const VALUE_TEXT_CAP = 400;
-const COLLECTION_CAP = 128;
+// Bound pathological literal output while retaining exact text within the declared budget.
+export const VALUE_TEXT_CAP = 4000;
+// How much of ONE declaration's value may be emitted, counted in values rather than in levels.
+//
+// A depth bound was the wrong axis. An AST is finite and acyclic, so recursion terminates without
+// one; the only thing a bound controls is output size, and output size is width TIMES depth. A
+// depth limit therefore refuses a one-branch chain forty levels deep -- which costs forty values --
+// while admitting a wide object with far more values. Bound output size explicitly instead.
+export const MAX_VALUE_NODES = 8192;
+// A stack guard, not a data policy: tree-sitter itself would fail before this on real input.
+const STACK_DEPTH_CEILING = 64;
+export const COLLECTION_CAP = 1024;
 const SCOPE_NAME_CAP = 120;
 
 const cap = (text) => {
@@ -90,18 +68,36 @@ function scalar(node) {
   }
 }
 
-function arrayItems(node) {
+function arrayItems(node, depth = 0, budget = freshBudget()) {
   const elements = node.namedChildren.filter((child) => child.type !== 'comment');
   const items = elements.slice(0, COLLECTION_CAP).map((child) => {
-    const value = scalar(child);
+    const value = nested(child, depth, budget);
     return value
       ? { ...value, line: line(child) }
-      : { value_kind: 'unevaluated', text: cap(child.text), line: line(child) };
+      : { value_kind: 'unevaluated', text: cap(child.text), line: line(child),
+        ...refusalReason(depth, budget) };
   });
   return { items, entry_count: elements.length, truncated: elements.length > COLLECTION_CAP };
 }
 
-function objectEntries(node) {
+/**
+ * A value inside a collection, evaluated to the same standard as a top-level one.
+ *
+ * These used to try `scalar()` alone, so a nested object became one `unevaluated` blob of raw
+ * text, capped at VALUE_TEXT_CAP. A configuration whose shape is `{ [ENV]: { tokens: { access:
+ * 720 } } }` therefore recorded four top-level keys and lost every value inside them -- the exact
+ * class this module exists to retain. Depth is bounded, and a value refused for depth says so
+ * rather than being indistinguishable from one nobody looked at.
+ */
+function nested(node, depth, budget) {
+  const direct = scalar(node);
+  if (direct) { budget.spent += 1; return direct; }
+  if (depth >= STACK_DEPTH_CEILING || budget.spent >= budget.limit) return null;
+  budget.spent += 1;
+  return summarizeValue(node, depth + 1, budget);
+}
+
+function objectEntries(node, depth = 0, budget = freshBudget()) {
   const properties = node.namedChildren.filter((child) => child.type === 'pair' || child.type === 'shorthand_property_identifier' || child.type === 'spread_element');
   const entries = properties.slice(0, COLLECTION_CAP).map((child) => {
     if (child.type === 'shorthand_property_identifier') return { key: child.text, value_kind: 'unevaluated', text: child.text, line: line(child) };
@@ -110,10 +106,11 @@ function objectEntries(node) {
     const valueNode = child.childForFieldName('value');
     if (!keyNode || !valueNode) return { key: null, value_kind: 'unevaluated', text: cap(child.text), line: line(child) };
     const key = keyNode.type === 'string' ? unquote(keyNode) : keyNode.text;
-    const value = scalar(valueNode);
+    const value = nested(valueNode, depth, budget);
     return value
       ? { key, ...value, line: line(child) }
-      : { key, value_kind: 'unevaluated', text: cap(valueNode.text), line: line(child) };
+      : { key, value_kind: 'unevaluated', text: cap(valueNode.text), line: line(child),
+        ...refusalReason(depth, budget) };
   });
   return { entries, entry_count: properties.length, truncated: properties.length > COLLECTION_CAP };
 }
@@ -124,13 +121,24 @@ function objectEntries(node) {
  * reports the same items an unwrapped array literal would, plus the fact that it
  * is frozen — which is itself a design statement about the constant.
  */
-export function summarizeValue(node, depth = 0) {
-  if (!node || depth > 3) return null;
+export function freshBudget() {
+  return { spent: 0, limit: MAX_VALUE_NODES };
+}
+
+/** Why a value was not evaluated, so exhaustion is never mistaken for "nobody looked". */
+function refusalReason(depth, budget) {
+  if (depth >= STACK_DEPTH_CEILING) return { depth_exceeded: true };
+  if (budget.spent >= budget.limit) return { budget_exhausted: true };
+  return {};
+}
+
+export function summarizeValue(node, depth = 0, budget = freshBudget()) {
+  if (!node || depth > STACK_DEPTH_CEILING) return null;
   const direct = scalar(node);
   if (direct) return { ...direct };
   switch (node.type) {
-    case 'array': return { value_kind: 'array', ...arrayItems(node) };
-    case 'object': return { value_kind: 'object', ...objectEntries(node) };
+    case 'array': return { value_kind: 'array', ...arrayItems(node, depth, budget) };
+    case 'object': return { value_kind: 'object', ...objectEntries(node, depth, budget) };
     case 'parenthesized_expression': {
       const inner = node.namedChildren[0];
       return inner ? summarizeValue(inner, depth + 1) : null;
@@ -201,7 +209,7 @@ function isExported(declaration) {
 /**
  * Emit one `literal_value` fact per summarizable declarator anywhere in the file.
  * Function-local constants are INCLUDED and marked with their scope: the estate's
- * default brew-DB path (Q2) is a function-local `join(...)`, and excluding local
+ * default batch-DB path (Q2) is a function-local `join(...)`, and excluding local
  * scope would re-open the exact gap this feature closes.
  */
 export function scanLiteralValues(rootNode, ctx) {
@@ -232,37 +240,7 @@ export function scanLiteralValues(rootNode, ctx) {
   return facts;
 }
 
-// --- F1 (second half): PREDICATE LITERALS ----------------------------------
-//
-// §7.1 names the missing fact class for Q15 and Q17 precisely: "validator
-// literal arrays; **regex + equality predicates**." A declarator-only
-// extractor closes the first half and NOT the second, and this estate's
-// validators put their real contract in the second:
-//
-//   src/substrate/pluginManifest.mjs:31  const REQUIRED = […]        ← declarator
-//   src/substrate/pluginManifest.mjs:36  /^[a-z0-9][a-z0-9-]*$/.test(name)
-//   src/substrate/pluginManifest.mjs:39  manifest.api_version !== 1
-//   src/substrate/pluginManifest.mjs:138 ["always","env","not_env","bundle"].includes(key)
-//   src/substrate/pluginManifest.mjs:142 cond[key] !== true
-//
-// Three of those four are inline literals in TEST position, bound to no name.
-// Q15 asks what constraint is placed on `name` and which `api_version` values
-// are accepted; Q17 asks how many keys `inject_when` permits, which names are
-// legal, and what value constraint applies to each. Every one of those answers
-// is an inline predicate literal.
-//
-// WHAT IT EXTRACTS. One `predicate_literal` fact per site where a literal is
-// TESTED against a named subject:
-//   membership   <array|set literal>.includes(x) / .has(x)
-//   pattern      <regex literal>.test(x) / x.match(<regex>)
-//   comparison   x === <scalar> / x !== <scalar> / x < <number> …
-//   prefix       x.startsWith(<string>) / x.endsWith(<string>)
-//
-// WHAT IT REFUSES, TYPED. The SUBJECT is recorded as source text, never
-// resolved to a value. A comparison in which NEITHER side is a literal emits
-// nothing (it states no constraint this module can read). A comparison whose
-// literal side is a collection is emitted with its items, not with a claim
-// about what the collection means.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 const PREDICATE_METHODS = new Map([
   ['includes', 'membership'], ['has', 'membership'], ['test', 'pattern'],
@@ -333,31 +311,7 @@ export function scanPredicateLiterals(rootNode, ctx) {
   return facts;
 }
 
-// --- F1b: throw-site error-code string literals -----------------------------
-//
-// §7.2 names this a sub-item of F1: "throw-site error-code string literals —
-// unblocks Q16's codes." Q16 asks which error code each of two independent
-// route-registration gates raises. The codes are string literals attached to a
-// thrown Error, in three idioms this estate actually uses (verified by grep at
-// the base of record):
-//   1. `const e = new Error(msg); e.code = 'X'; throw e;`
-//   2. `throw Object.assign(new Error(msg), { code: 'X' })`
-//   3. `throw fail("ROUTE_NOT_DECLARED", "…")` — a FACTORY CALL whose first
-//      argument is the code. This is the dominant idiom in the runtime broker
-//      (src/plugin-runtime/broker.mjs:167 ROUTE_NAMESPACE_VIOLATION and :180
-//      ROUTE_NOT_DECLARED are exactly Q16's two gates), and an extractor that
-//      handled only (1) and (2) would answer Q16 with silence while the codes
-//      sit in plain string literals. Grounded by reading the real thrower, not
-//      by assuming a shape.
-//   4. `throw new SomeError(msg)` with no readable code — emitted with
-//      `code: null` and its constructor name, a witness to the throw site
-//      without claiming a code the source did not state.
-//
-// The factory form is claimed ONLY when the first argument is a string literal
-// in SCREAMING_SNAKE shape. A factory whose first argument is a human message
-// (`throw invalid("path must be absolute")`) yields `code: null` — promoting a
-// message to a code would be a fabrication of exactly the kind this map does
-// not commit.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 
 const ERROR_CODE_PROPERTIES = new Set(['code', 'statusCode', 'status', 'errorCode']);
 const ERROR_CODE_SHAPE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;

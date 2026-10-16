@@ -15,7 +15,7 @@ test('the contract digest changes when the command surface changes, and not othe
   assert.equal(Object.keys(drifted).length, Object.keys(held.commands).length);
   assert.equal(held.contract, ESTATE_QUERY_CONTRACT_VERSION);
   // Estate scoping is context, not contract: two estates share one surface.
-  assert.equal(querySurfaceContract({ estate: 'sw' }).digest, querySurfaceContract({ estate: 'other' }).digest);
+  assert.equal(querySurfaceContract({ estate: 'parcel' }).digest, querySurfaceContract({ estate: 'other' }).digest);
 });
 
 test('the contract lists exactly the commands the CLI dispatches', () => {

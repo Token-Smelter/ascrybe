@@ -7,9 +7,11 @@
 //
 // Usage:
 //   node scripts/remap.mjs --work <extract+merge work dir> --sha <head> --out <map dir>
+//   node scripts/remap.mjs --work <dir> --source-pins <estate-pins.json> --out <map dir>
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readEstatePins } from '../tools/materialize-estate.mjs';
 import { buildCodeGroundedAssertions } from '../tools/code-grounded-assertions.mjs';
 import {
   buildCodeDependencyRelations, traversableRelations,
@@ -27,17 +29,31 @@ import { sha256, stableStringify } from '../tools/lib.mjs';
 const canonical = value => stableStringify(value).trim();
 const MATERIALIZATION_ID = 'materialization:remap-code-plane-v1';
 
-function parse(argv) {
+// A multi-repository estate has no single commit, so --sha has nothing to name. Its identity is
+// the pin map materialization wrote, and the digest the projection checks is that map's -- which
+// is why the head is DERIVED here rather than typed: a hand-entered one would be stamped into
+// provenance and receipts while the projection quietly used the pins, and the two would disagree
+// with nothing able to notice. Declaring both is refused for the same reason.
+export function parseRemapArguments(argv) {
   const held = {};
+  let pinsPath = null;
   for (let index = 0; index < argv.length; index += 2) {
     const [flag, value] = [argv[index], argv[index + 1]];
     if (!value) throw new Error(`${flag} requires a value`);
     if (flag === '--work') held.work = resolve(value);
     else if (flag === '--sha') held.sha = value;
     else if (flag === '--out') held.out = resolve(value);
+    else if (flag === '--source-pins') pinsPath = resolve(value);
     else if (flag === '--docs-root') held.docs_root = resolve(value);
     else if (flag === '--docs-config') held.docs_config = resolve(value);
     else throw new Error(`unknown argument: ${flag}`);
+  }
+  if (pinsPath) {
+    if (held.sha) throw new Error('--sha and --source-pins both declare the source identity; a multi-repository estate declares only the pins');
+    const pins = readEstatePins(pinsPath);
+    held.source_pins = pins.pins;
+    held.source_pin_refusals = pins.refusals;
+    held.sha = pins.digest;
   }
   for (const required of ['work', 'sha', 'out']) {
     if (!held[required]) throw new Error(`--${required} is required`);
@@ -46,11 +62,20 @@ function parse(argv) {
 }
 
 export function remapCodePlane({ work, sha, out, docs_root: docsRoot = null,
-  docs_config: docsConfig = null, source_pins: sourcePinMap = null }) {
+  docs_config: docsConfig = null, source_pins: sourcePinMap = null,
+  source_pin_refusals: sourcePinRefusals = [] }) {
   const startedAt = new Date().toISOString();
+  const extractManifest = JSON.parse(readFileSync(join(work, 'extract', '_MANIFEST.json'), 'utf8'));
+  // The converse of refusing --sha alongside --source-pins, and the likelier mistake: a
+  // multi-repository estate remapped with a single --sha produces a code graph with no pins, and
+  // read-span then seeks EVERY repository's bytes at one repository's commit. The estate's own
+  // extract manifest already knows how many members it read.
+  if (!sourcePinMap && (extractManifest.repositories?.length ?? 0) > 1) {
+    throw new Error(`this estate has ${extractManifest.repositories.length} repositories and no single commit names it; pass --source-pins instead of --sha`);
+  }
   const plane = buildCodeGroundedAssertions({
     facts_dir: join(work, 'extract'),
-    extract_manifest: JSON.parse(readFileSync(join(work, 'extract', '_MANIFEST.json'), 'utf8')),
+    extract_manifest: extractManifest,
     merge_graph: JSON.parse(readFileSync(join(work, 'merge', 'estate-graph.json'), 'utf8')),
     merge_graph_digest: readFileSync(join(work, 'merge', 'digest.txt'), 'utf8').trim(),
     source_head: sha, required_source_head: sha,
@@ -187,6 +212,9 @@ export function remapCodePlane({ work, sha, out, docs_root: docsRoot = null,
       // A multi-repo estate declares one pin per repository; its digest is the estate's source
       // identity, and read-span resolves each fact's bytes against its own repository's commit.
       ...(sourcePinMap ? { source_pins: sourcePinMap } : {}),
+      // A map built from a partial estate says which members are absent. Without this the only
+      // record of a refused repository was the run's console output.
+      ...(sourcePinRefusals.length ? { source_pin_refusals: sourcePinRefusals } : {}),
       source_head: sha, code_plane_head: plane.code_plane_head,
       identity_materialization: MATERIALIZATION_ID,
       relation_report_digest: projected.report.report_digest,
@@ -229,6 +257,6 @@ export function remapCodePlane({ work, sha, out, docs_root: docsRoot = null,
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { remapCodePlane(parse(process.argv.slice(2))); }
+  try { remapCodePlane(parseRemapArguments(process.argv.slice(2))); }
   catch (error) { console.error(`FAIL remap: ${error.stack || error.message}`); process.exitCode = 1; }
 }

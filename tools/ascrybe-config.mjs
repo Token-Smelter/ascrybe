@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { sha256, stableStringify } from './lib.mjs';
+import { validateEntityAnalysisConfig } from './entity-analysis-config.mjs';
 
 export const ASCRYBE_RUNTIME_CONFIG_SCHEMA = 'estate-map/runtime-config/v1';
 const canonical = value => stableStringify(value).trim();
@@ -37,7 +38,7 @@ function positiveInteger(value, label, { maximum = Number.MAX_SAFE_INTEGER } = {
 
 function modelConfig(role, input) {
   closed(input, [
-    'runner', 'name', 'thinking', 'concurrency', 'window_bytes', 'timeout_ms',
+    'runner', 'name', 'thinking', 'concurrency', 'window_bytes', 'max_claims_per_window', 'timeout_ms',
     'max_event_bytes', 'max_answer_bytes',
   ], `models.${role}`);
   if (input.runner !== 'pi' || !clean(input.name)) {
@@ -52,6 +53,11 @@ function modelConfig(role, input) {
     thinking: input.thinking == null ? null : clean(input.thinking),
     concurrency: positiveInteger(input.concurrency, `models.${role}.concurrency`, { maximum: 256 }),
     window_bytes: positiveInteger(input.window_bytes, `models.${role}.window_bytes`, { maximum: 1024 * 1024 }),
+    // Omitted keeps the built-in ceiling; an explicit null asks the model for no ceiling at all,
+    // which is the only setting under which an omitted claim is never something we requested.
+    max_claims_per_window: input.max_claims_per_window === undefined ? undefined
+      : input.max_claims_per_window === null ? null
+        : positiveInteger(input.max_claims_per_window, `models.${role}.max_claims_per_window`, { maximum: 10000 }),
     timeout_ms: positiveInteger(input.timeout_ms, `models.${role}.timeout_ms`),
     max_event_bytes: positiveInteger(input.max_event_bytes, `models.${role}.max_event_bytes`),
     max_answer_bytes: positiveInteger(input.max_answer_bytes, `models.${role}.max_answer_bytes`),
@@ -63,7 +69,7 @@ function modelConfig(role, input) {
 }
 
 export function validateEstateMapRuntimeConfig(input) {
-  closed(input, ['schema', 'models', 'neo4j', 'projection', 'dashboard', 'source_repositories', 'catalog_globs'], 'runtime config');
+  closed(input, ['schema', 'models', 'neo4j', 'projection', 'dashboard', 'source_repositories', 'catalog_globs', 'ontology_classification', 'entity_analysis'], 'runtime config');
   if (input.schema !== ASCRYBE_RUNTIME_CONFIG_SCHEMA) {
     fail('RUNTIME_CONFIG_SCHEMA_UNSUPPORTED', `expected ${ASCRYBE_RUNTIME_CONFIG_SCHEMA}`);
   }
@@ -110,13 +116,39 @@ export function validateEstateMapRuntimeConfig(input) {
   });
   if (!dashboard.host) fail('RUNTIME_CONFIG_DASHBOARD_INVALID', 'dashboard.host is required');
 
-  const catalogGlobs = input.catalog_globs == null ? [] : input.catalog_globs;
-  if (!Array.isArray(catalogGlobs) || catalogGlobs.some(pattern => typeof pattern !== 'string'
-    || !pattern.trim() || pattern.startsWith('/') || pattern.includes('..'))) {
-    fail('RUNTIME_CONFIG_CATALOG_GLOBS_INVALID', 'catalog_globs must be an array of non-empty repository-relative glob patterns');
-  }
+  const catalogGlobs = validateCatalogGlobs(input.catalog_globs);
+  const repositories = validateSourceRepositories(input.source_repositories);
 
-  const sourceRepositories = input.source_repositories == null ? {} : input.source_repositories;
+  const classificationInput = input.ontology_classification ?? {};
+  closed(classificationInput, ['llm_role', 'system_one', 'llm_max_input_bytes'], 'ontology_classification');
+  const classificationRole = classificationInput.llm_role ?? 'code_claims';
+  if (!Object.hasOwn(models, classificationRole)) {
+    fail('RUNTIME_CONFIG_CLASSIFICATION_ROLE_INVALID', 'ontology_classification.llm_role must name a configured models role');
+  }
+  const systemOneInput = classificationInput.system_one;
+  if (systemOneInput != null) closed(systemOneInput, ['model', 'credential_env'], 'ontology_classification.system_one');
+  if (systemOneInput != null && (systemOneInput.model !== 'typesafe/jev-1.13'
+    || !/^[A-Z][A-Z0-9_]*$/u.test(clean(systemOneInput.credential_env)))) {
+    fail('RUNTIME_CONFIG_CLASSIFICATION_ACCELERATOR_INVALID', 'system_one requires pinned model typesafe/jev-1.13 and a credential environment variable name');
+  }
+  const ontologyClassification = Object.freeze({
+    llm_role: classificationRole,
+    llm_max_input_bytes: classificationInput.llm_max_input_bytes === undefined ? 100_000
+      : positiveInteger(classificationInput.llm_max_input_bytes, 'ontology_classification.llm_max_input_bytes', { maximum: 1_000_000 }),
+    system_one: systemOneInput == null ? null : Object.freeze({ model: systemOneInput.model,
+      credential_env: clean(systemOneInput.credential_env) }),
+  });
+
+  return Object.freeze({ schema: ASCRYBE_RUNTIME_CONFIG_SCHEMA, models, neo4j, projection, dashboard,
+    catalog_globs: catalogGlobs,
+    ...(input.entity_analysis === undefined ? {} : { entity_analysis: validateEntityAnalysisConfig(input.entity_analysis) }),
+    ...(input.ontology_classification === undefined ? {} : { ontology_classification: ontologyClassification }),
+    source_repositories: repositories });
+}
+
+// Shared by the full runtime-config validator and callers reading only source repositories.
+export function validateSourceRepositories(value) {
+  const sourceRepositories = value == null ? {} : value;
   if (!sourceRepositories || typeof sourceRepositories !== 'object' || Array.isArray(sourceRepositories)) {
     fail('RUNTIME_CONFIG_REPOSITORIES_INVALID', 'source_repositories must be an object mapping repository names to absolute paths');
   }
@@ -125,12 +157,21 @@ export function validateEstateMapRuntimeConfig(input) {
       fail('RUNTIME_CONFIG_REPOSITORIES_INVALID', 'source_repositories must map simple repository names to absolute paths');
     }
   }
-  const repositories = Object.freeze(Object.fromEntries(Object.entries(sourceRepositories)
+  return Object.freeze(Object.fromEntries(Object.entries(sourceRepositories)
     .sort(([left], [right]) => left.localeCompare(right)).map(([repository, path]) => [repository, clean(path)])));
+}
 
-  return Object.freeze({ schema: ASCRYBE_RUNTIME_CONFIG_SCHEMA, models, neo4j, projection, dashboard,
-    catalog_globs: Object.freeze([...catalogGlobs].map(pattern => pattern.trim()).sort()),
-    source_repositories: repositories });
+// Shared by the full runtime-config validator above AND by any caller (e.g.
+// tools/delta-update-run.mjs) that reads only a `catalog_globs` array on its own, without the
+// rest of the runtime config's schema (models, neo4j, dashboard) -- ONE validation rule for what a
+// catalog glob is, regardless of which document it was read from.
+export function validateCatalogGlobs(value) {
+  const catalogGlobs = value == null ? [] : value;
+  if (!Array.isArray(catalogGlobs) || catalogGlobs.some(pattern => typeof pattern !== 'string'
+    || !pattern.trim() || pattern.startsWith('/') || pattern.includes('..'))) {
+    fail('RUNTIME_CONFIG_CATALOG_GLOBS_INVALID', 'catalog_globs must be an array of non-empty repository-relative glob patterns');
+  }
+  return Object.freeze([...catalogGlobs].map(pattern => pattern.trim()).sort());
 }
 
 export function loadEstateMapRuntimeConfig(path) {

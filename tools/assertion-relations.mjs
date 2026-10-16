@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-// Relations between assertions: what a corpus says about its own claims.
-//
-// Until now every edge in the documentary plane ran from a claim to its evidence or to a code
-// fact. Nothing connected two claims, so a corpus could not be asked the questions that matter
-// most about it: do these two documents say the same thing, do they contradict, has this design
-// been superseded. Measured on a real claim map, 250,000 documentary edges contained exactly zero
-// claim-to-claim relations.
-//
-// The assertion model already made this expressible — an assertion whose subject is a relation
-// between two assertions needs no new structure. What was missing is a producer, and the reason
-// to be careful about building one: the failure mode is asserting that two documents contradict
-// when they merely differ in scope, which is worse than saying nothing. So this producer is
-// deterministic, its rules are the ported comparison classifier's rules, and every relation it
-// emits carries both assertions' verbatim text so a reader can check the call rather than trust it.
-//
-// Candidate pairs come from a bucket: two assertions are comparable only when they share a subject
-// neighbourhood and a predicate family. Without that, every corpus becomes an O(n squared)
-// comparison of unrelated sentences, and the classifier's own first rule — different bucket means
-// incomparable — would reject nearly all of it anyway.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,10 +31,8 @@ const normalize = value => clean(value)
  * is what keeps the comparison from being every sentence against every other sentence.
  */
 // A diagram-local identifier like A, R1, or P names nothing outside its own fence, so two
-// diagrams both drawing `A --> B` are not talking about the same thing. Measured over a real
-// corpus, comparing on such endpoints produced 5,444 relations of which the overwhelming majority
-// were single-letter collisions between unrelated drawings — a producer that manufactures
-// disagreements between documents that never discussed each other. An endpoint must be
+// diagrams both drawing `A --> B` need not discuss the same thing. Comparing such local
+// identifiers would manufacture disagreements between unrelated documents. An endpoint must be
 // distinctive enough to name something before two assertions about it can be compared.
 const DISTINCTIVE = /^[a-z][a-z0-9]{3,}$/u;
 export function comparableEndpoint(value) {
@@ -105,9 +84,6 @@ export function classifyAssertionPair(left, right) {
     return { relation: 'modality_divergence',
       rule: 'same endpoints, one prescribes and the other describes: a requirement paired with a statement of fact' };
   }
-  // One side labelled its edge and the other did not. A bare arrow says these things are related
-  // without saying how, so it cannot disagree with a label — it is silent, not contradictory.
-  // Measured on a real corpus this was the single largest source of claimed disagreements.
   const unlabelled = predicate => /^[-.=<>ox]+$/u.test(clean(predicate));
   if (unlabelled(left.subject.predicate) || unlabelled(right.subject.predicate)) {
     return { relation: 'compatible_partial',

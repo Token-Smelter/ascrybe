@@ -31,7 +31,13 @@ const clean = value => String(value ?? '').trim();
 // it is kept separately from the prose title rather than folded into it.
 const NUMBERED = /^((?:\d+\.)*\d+)\s+(.*)$/u;
 
-function headings(lines) {
+/**
+ * The document's outline. Exported because the claim windower needs the SAME boundaries the
+ * sections are extracted at: it had its own ATX-only rule, blind to the 565 setext headings in one
+ * estate, and two parsers disagreeing about where a document divides is how a claim ends up
+ * attributed to a section it was not read from.
+ */
+export function headings(lines) {
   const rows = [];
   let fenced = false;
   lines.forEach((raw, index) => {

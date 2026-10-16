@@ -1,5 +1,4 @@
-// Canonical, model-free record envelopes for Step-3 campaign artifacts.
-// Implements progressive-map-generation Step-3 §§4.2, 5.1–5.4, 6.2–6.7, 11.2, 12.2.
+// Preserve source witnesses; do not infer authority from naming conventions alone.
 import { sha256, stableStringify } from './lib.mjs';
 
 export const ADJUDICATION_SCHEMA_VERSION = 'estate-map/adjudication-record/v1';

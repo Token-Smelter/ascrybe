@@ -6,7 +6,6 @@ import test from 'node:test';
 
 import { renderClaimEvidenceExplorer } from '../tools/claim-evidence-explorer.mjs';
 
-// One claim past the render bound. The corpus that exposed this defect had 111,499.
 const OVER_BOUND = 5001;
 
 function map() {
