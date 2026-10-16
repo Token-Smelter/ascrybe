@@ -96,6 +96,11 @@ test('unauthorized, Git, concurrent and changing sources are refused without adv
   assert.equal(git(first.source.root, 'rev-parse', 'refs/heads/snapshots'), first.source.ref);
 });
 
+test('snapshot state under a source child whose name starts with two dots is refused as inside the source', t => {
+  const dir = sandbox(t), root = join(dir, 'folder'); mkdirSync(root); writeFileSync(join(root, 'safe.md'), 'Safe\n');
+  assert.throws(() => snapshotSource({ root, id: 'paper', authorizedRoots: [root], stateRoot: join(root, '..state') }), /must be outside the source/u);
+});
+
 test('private exclude rules are applied before staging', t => {
   const dir = sandbox(t), root = join(dir, 'folder'); mkdirSync(root); writeFileSync(join(root, 'safe.md'), 'Safe\n');
   const options = { root, id: 'paper', authorizedRoots: [root], stateRoot: join(dir, 'state') }, first = snapshotSource(options);
