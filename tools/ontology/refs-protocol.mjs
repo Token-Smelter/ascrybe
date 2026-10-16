@@ -6,6 +6,26 @@
 import { createHash } from 'node:crypto';
 
 export const REFS_PROTOCOL = 'refs/v1';
+// Decoder results travel under this symbol. JSON from a model cannot contain a symbol key, so nothing a model writes can reach the trusted slot.
+export const TRUSTED = Symbol('decoded-by-the-caller');
+
+/**
+ * The answer boundary, for every protocol. A binding or new concept that is not a plain object is refused, and so is one that carries a field
+ * the caller reserves for itself (a name starting with an underscore). Nothing is stripped silently and nothing is repaired.
+ */
+export function screenAnswer(answer) {
+  const refused = [];
+  const plain = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const keep = (items, kind) => (Array.isArray(items) ? items : []).filter(item => {
+    if (!plain(item)) { refused.push({ code: 'ENTRY_NOT_AN_OBJECT', kind }); return false; }
+    const reserved = Object.keys(item).find(k => k.startsWith('_'));
+    if (reserved) { refused.push({ code: 'RESERVED_FIELD_FROM_MODEL', kind, field: reserved, node: typeof item.node === 'string' ? item.node : null }); return false; }
+    return true;
+  });
+  const a = plain(answer) ? answer : {};
+  return { answer: { ...a, bindings: keep(a.bindings, 'binding'), new_concepts: keep(a.new_concepts, 'new_concept') }, refused };
+}
+
 export const REFS_BOUNDS = Object.freeze({ span_max_lines: 40 });
 const sha = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 
@@ -35,9 +55,12 @@ export function decodeSpan(span, { totalLines, shown, maxLines = REFS_BOUNDS.spa
  * custody = { answer_request_digest, expected_pin }: the digest of the request the answer belongs to, and the pin the decode is for. A different request or pin refuses everything.
  * Returns an answer in the loop's own shape (concept = exact accession, quote = text derived from the pinned lines) plus the refusals, with the decoded references kept.
  */
-export function decodeRefsAnswer({ answer, ctx, custody }) {
-  const refused = [];
-  const fail = (code, extra = {}) => ({ answer: { ...answer, bindings: [], new_concepts: [] }, refused: [{ code, ...extra }] });
+export function decodeRefsAnswer({ answer: rawAnswer, ctx, custody }) {
+  let answer = rawAnswer;
+  const screened = screenAnswer(answer);
+  answer = screened.answer;
+  const refused = [...screened.refused];
+  const fail = (code, extra = {}) => ({ answer: { ...answer, bindings: [], new_concepts: [] }, refused: [...refused, { code, ...extra }] });
   if (custody.answer_request_digest !== ctx.request_digest) return fail('REF_CROSS_REQUEST', { expected: ctx.request_digest, got: custody.answer_request_digest });
   if (custody.expected_pin !== ctx.pin) return fail('REF_PIN_MISMATCH', { expected: ctx.pin, got: custody.expected_pin });
   if (answer?.protocol !== REFS_PROTOCOL) return fail('PROTOCOL_MARKER_MISSING');
@@ -46,13 +69,14 @@ export function decodeRefsAnswer({ answer, ctx, custody }) {
   const newKeys = new Set();
   const new_concepts = [];
   for (const nc of Array.isArray(answer.new_concepts) ? answer.new_concepts : []) {
-    if ('witness_quote' in nc || (nc.counterexample && 'quote' in nc.counterexample)) { refused.push({ code: 'PROTOCOL_VIOLATION_FREEFORM', key: nc.key ?? null, field: 'new concept quote' }); continue; }
+    if ('witness_quote' in nc || (nc.counterexample !== null && typeof nc.counterexample === 'object' && 'quote' in nc.counterexample)) { refused.push({ code: 'PROTOCOL_VIOLATION_FREEFORM', key: nc.key ?? null, field: 'new concept quote' }); continue; }
     const w = derive(nc.witness_span, 'witness');
     let counter = { status: 'none_found' };
-    if (nc.counterexample?.status === 'tested_negative') { const c = derive(nc.counterexample.span, 'counterexample'); counter = c.ok ? { status: 'tested_negative', ...c.at } : { status: 'claimed_not_located', why: c.code }; }
+    if (nc.counterexample !== null && typeof nc.counterexample === 'object' && nc.counterexample.status === 'tested_negative') { const c = derive(nc.counterexample.span, 'counterexample'); counter = c.ok ? { status: 'tested_negative', ...c.at } : { status: 'claimed_not_located', why: c.code }; }
     if (!w.ok) { refused.push({ code: w.code, key: nc.key ?? null, field: 'witness_span', span: nc.witness_span ?? null }); continue; }
     newKeys.add(nc.key);
-    new_concepts.push({ ...nc, witness_quote: w.at.quote, _witness: { ok: true, at: w.at }, _counter: counter, counterexample: { status: counter.status, quote: counter.quote }, _decoded: { protocol: REFS_PROTOCOL, witness_span: nc.witness_span } });
+    new_concepts.push({ key: nc.key, label: nc.label, semantic_category: nc.semantic_category, definition: nc.definition, inclusion: nc.inclusion, exclusion: nc.exclusion, instance_conditions: nc.instance_conditions, witness_quote: w.at.quote, counterexample: { status: counter.status, quote: counter.quote },
+      [TRUSTED]: { witness: { ok: true, at: w.at }, counter, decoded: { protocol: REFS_PROTOCOL, witness_span: nc.witness_span } } });
   }
   const bindings = [];
   for (const b of Array.isArray(answer.bindings) ? answer.bindings : []) {
@@ -66,7 +90,7 @@ export function decodeRefsAnswer({ answer, ctx, custody }) {
     else { refused.push({ code: concept.includes(':') ? 'PROTOCOL_VIOLATION_FREEFORM' : 'REF_UNKNOWN_CONCEPT', field: 'concept', ...base }); continue; }
     const s = derive(b.span, 'support');
     if (!s.ok) { refused.push({ code: s.code, ...base, detail: s.detail }); continue; }
-    bindings.push({ ...b, concept: accession, quote: s.at.quote, _derived: s.at, _decoded: { protocol: REFS_PROTOCOL, concept_ref: concept.startsWith('new:') ? null : concept, concept_accession: accession, concept_version_id: versionId, span: b.span, ref_map_digest: ctx.ref_map.digest, request_digest: ctx.request_digest, pin: ctx.pin } });
+    bindings.push({ node: b.node, role: b.role, predicate: b.predicate, owner: b.owner, concept: accession, quote: s.at.quote, [TRUSTED]: { derived: s.at, decoded: { protocol: REFS_PROTOCOL, concept_ref: concept.startsWith('new:') ? null : concept, concept_accession: accession, concept_version_id: versionId, span: b.span, ref_map_digest: ctx.ref_map.digest, request_digest: ctx.request_digest, pin: ctx.pin } } });
   }
   return { answer: { ...answer, bindings, new_concepts }, refused };
 }

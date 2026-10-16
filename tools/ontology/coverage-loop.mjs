@@ -14,7 +14,7 @@ import { createInterface } from 'node:readline';
 import { callDiscoveryLlm, discoverySupport, locate } from './discovery.mjs';
 import { enclosing, readPinned } from './handoff-trace.mjs';
 import { COVERAGE_POLICY } from './graph-coverage.mjs';
-import { REFS_PROTOCOL, REFS_BOUNDS, mintRefs, shownLines, decodeRefsAnswer } from './refs-protocol.mjs';
+import { REFS_PROTOCOL, REFS_BOUNDS, TRUSTED, mintRefs, shownLines, decodeRefsAnswer, screenAnswer } from './refs-protocol.mjs';
 
 const { purchase, selectedModel, digest, text, list, CONCEPT_CATEGORIES } = discoverySupport;
 export const LOOP_SCAFFOLD = 'estate_coverage_loop_primary/v3';
@@ -250,6 +250,7 @@ export async function judgeFamilies({ families, source, vocabulary, runtime, jou
     out.missing_context.push(...built.missing.map(m => ({ family_id: family.family_id, ...m })));
     out.contexts.push({ family_id: family.family_id, phase, escalated, request_digest: response.request_digest, retrieval: built.packet.retrieval ?? 'short_lexical_list', shown_concept_ids: built.concept_ids, declarations: built.packet.declarations.map(d => ({ lines: d.lines, may_be_cut_or_incomplete: d.may_be_cut_or_incomplete ?? null })), judged_nodes: built.judged.map(n => ({ node_id: n.node_id, label: n.label, line: n.line })), omitted_nodes: built.missing, own_ranges: built.own_ranges ? [...built.own_ranges].map(([c, r]) => ({ node_id: c.node_id, range: r })) : null, escalated_from: answer.escalated_from ?? null, family_nodes_total: family.candidates.length });
     const ids = new Map(built.packet.nodes.map((n, i) => [n.id, built.judged[i]])), shown = new Set(built.concept_ids);
+    if (protocol !== REFS_PROTOCOL) { const sc = screenAnswer(answer); answer = sc.answer; for (const r of sc.refused) out.refused.push({ family_id: family.family_id, ...r }); }
     if (protocol === REFS_PROTOCOL) {
       // Preserve source witnesses; do not infer authority from naming conventions alone.
       const dec = decodeRefsAnswer({ answer, ctx: { ...refCtx, file_lines: fileText.split('\n'), shown: shownLines(built.packet.declarations.map(d => d.lines)), node_ids: new Set(ids.keys()) }, custody: { answer_request_digest: response.request_digest, expected_pin: source.ref } });
@@ -259,10 +260,10 @@ export async function judgeFamilies({ families, source, vocabulary, runtime, jou
     const check = (quote, label) => { const q = String(quote ?? ''); if (!q.trim()) return { ok: false, why: 'EMPTY_QUOTE' }; const r = locate({ text: fileText, start_line: 1 }, q); if (r.error) return { ok: false, why: r.error }; if (label && !r.quote.includes(label)) return { ok: false, why: 'LABEL_NOT_IN_QUOTE' }; return { ok: true, at: r }; };
     const newKeys = new Map();
     for (const nc of list(answer.new_concepts)) {
-      const key = text(nc?.key, 60), w = nc?._witness ?? check(nc?.witness_quote, null);
+      const key = text(nc?.key, 60), w = nc?.[TRUSTED]?.witness ?? check(nc?.witness_quote, null);
       const complete = nc?.label && CATEGORIES.includes(nc.semantic_category) && nc.definition && nc.inclusion && nc.exclusion && list(nc.instance_conditions).length;
       let counter = { status: 'none_found' };
-      if (nc?._counter) counter = nc._counter; else if (nc?.counterexample?.status === 'tested_negative') { const c = check(nc.counterexample.quote, null); counter = c.ok ? { status: 'tested_negative', quote: c.at.quote, start_line: c.at.start_line, end_line: c.at.end_line } : { status: 'claimed_not_located', why: c.why }; }
+      if (nc?.[TRUSTED]) counter = nc[TRUSTED].counter; else if (nc?.counterexample?.status === 'tested_negative') { const c = check(nc.counterexample.quote, null); counter = c.ok ? { status: 'tested_negative', quote: c.at.quote, start_line: c.at.start_line, end_line: c.at.end_line } : { status: 'claimed_not_located', why: c.why }; }
       if (!w.ok || !complete) { out.refused.push({ family_id: family.family_id, code: !complete ? 'NEW_CONCEPT_INCOMPLETE' : w.why, key }); continue; }
       const id = `proposal:${digest([family.family_id, key])}`; newKeys.set(key, { id, category: nc.semantic_category });
       out.new_concepts.push({ proposal_id: id, family_id: family.family_id, phase, label: text(nc.label, 120), semantic_category: nc.semantic_category, definition: text(nc.definition, 600), inclusion: text(nc.inclusion, 400), exclusion: text(nc.exclusion, 400),
@@ -273,7 +274,7 @@ export async function judgeFamilies({ families, source, vocabulary, runtime, jou
     for (const b of list(answer.bindings)) {
       const node = ids.get(b?.node); if (!node) { out.refused.push({ family_id: family.family_id, code: 'NODE_NOT_IN_PACKET' }); continue; }
       const role = ['instance', 'relates', 'part_of', 'used_by'].includes(b?.role) ? b.role : null; if (!role) { out.refused.push({ family_id: family.family_id, code: 'ROLE_UNKNOWN', node: node.label }); continue; }
-      const range = built.own_ranges.get(node), v0 = b._derived ? { ok: true, at: b._derived } : check(b?.quote, null), v = family.mode === 'text' ? (v0.ok && range && v0.at.start_line >= range[0] && v0.at.end_line <= range[1] ? v0 : { ok: false, why: v0.ok ? 'QUOTE_OUTSIDE_SECTION' : v0.why }) : (b._derived ? v0 : check(b?.quote, node.label)); if (!v.ok) { out.refused.push({ family_id: family.family_id, code: v.why, node: node.label }); continue; }
+      const range = built.own_ranges.get(node), v0 = b[TRUSTED] ? { ok: true, at: b[TRUSTED].derived } : check(b?.quote, null), v = family.mode === 'text' ? (v0.ok && range && v0.at.start_line >= range[0] && v0.at.end_line <= range[1] ? v0 : { ok: false, why: v0.ok ? 'QUOTE_OUTSIDE_SECTION' : v0.why }) : (b[TRUSTED] ? v0 : check(b?.quote, node.label)); if (!v.ok) { out.refused.push({ family_id: family.family_id, code: v.why, node: node.label }); continue; }
       if (role === 'part_of' || role === 'used_by') { pending.push({ b, node, v, role }); continue; }
       const concept = String(b?.concept ?? ''), isNew = concept.startsWith('new:'), rec = isNew ? newKeys.get(concept.slice(4)) : vocab.get(concept);
       if (!rec || (!isNew && !shown.has(concept))) { out.refused.push({ family_id: family.family_id, code: isNew ? 'NEW_CONCEPT_NOT_PROPOSED' : 'CONCEPT_NOT_SHOWN', node: node.label }); continue; }
@@ -281,7 +282,7 @@ export async function judgeFamilies({ families, source, vocabulary, runtime, jou
       if (!allowed.includes(b?.predicate)) { out.refused.push({ family_id: family.family_id, code: 'PREDICATE_NOT_ADMISSIBLE_FOR_CATEGORY', node: node.label, predicate: String(b?.predicate) }); continue; }
       const kind = REFERENT_KIND[node.kind] ?? 'passage';
       if (!isNew && role === 'instance' && (rec.domain ?? []).length && !rec.domain.includes(kind)) { out.refused.push({ family_id: family.family_id, code: 'REFERENT_KIND_OUTSIDE_DOMAIN', node: node.label, kind, domain: rec.domain }); continue; }
-      const decoded = b._decoded ? { ...b._decoded, identity_anchor: { line: node.line, text: (fileText.split('\n')[node.line - 1] ?? '').slice(0, 240), derived: true }, support_span_contains_node_line: node.line >= v.at.start_line && node.line <= v.at.end_line, support_span_inside_node_own_range: Boolean(range && v.at.start_line >= range[0] && v.at.end_line <= range[1]) } : null;
+      const decoded = b[TRUSTED] ? { ...b[TRUSTED].decoded, identity_anchor: { line: node.line, text: (fileText.split('\n')[node.line - 1] ?? '').slice(0, 240), derived: true }, support_span_contains_node_line: node.line >= v.at.start_line && node.line <= v.at.end_line, support_span_inside_node_own_range: Boolean(range && v.at.start_line >= range[0] && v.at.end_line <= range[1]) } : null;
       out.bindings.push({ ...(decoded ? { protocol: REFS_PROTOCOL, decoded } : {}), binding_id: `binding:${digest([family.family_id, node.node_id, isNew ? rec.id : concept, b.predicate])}`, family_id: family.family_id, phase, node_id: node.node_id, node_kind: node.kind, referent_kind: kind, node_label: node.label, node_line: node.line, role, predicate: b.predicate,
         membership: role === 'instance', concept: isNew ? rec.id : concept, concept_is_new_proposal: isNew, evidence: { file: family.file, start_line: v.at.start_line, end_line: v.at.end_line, quote: v.at.quote, commit_sha: source.ref }, status: 'proposed' });
     }
@@ -299,7 +300,7 @@ export async function judgeFamilies({ families, source, vocabulary, runtime, jou
         if (!new RegExp(`(^|[^A-Za-z0-9_$])${escaped}([^A-Za-z0-9_$]|$)`, 'u').test(own)) { out.refused.push({ family_id: family.family_id, code: 'USE_NOT_VISIBLE_IN_OWNER_DECLARATION', node: node.label }); continue; }
         d = { lines: range }; check = 'helper_name_appears_as_an_identifier_in_the_owner_declaration';
       }
-      out.part_of.push({ ...(b._decoded ? { protocol: REFS_PROTOCOL, decoded: { ...b._decoded, identity_anchor: { line: node.line, text: (fileText.split('\n')[node.line - 1] ?? '').slice(0, 240), derived: true } } } : {}), edge_id: `${role}:${digest([family.family_id, node.node_id, owner.node_id])}`, relation: role, node_line: owner.line, family_id: family.family_id, phase, node_id: node.node_id, node_label: node.label, owner_node_id: owner.node_id, owner_label: owner.label, owner_binding_id: ownerBinding.binding_id,
+      out.part_of.push({ ...(b[TRUSTED] ? { protocol: REFS_PROTOCOL, decoded: { ...b[TRUSTED].decoded, identity_anchor: { line: node.line, text: (fileText.split('\n')[node.line - 1] ?? '').slice(0, 240), derived: true } } } : {}), edge_id: `${role}:${digest([family.family_id, node.node_id, owner.node_id])}`, relation: role, node_line: owner.line, family_id: family.family_id, phase, node_id: node.node_id, node_label: node.label, owner_node_id: owner.node_id, owner_label: owner.label, owner_binding_id: ownerBinding.binding_id,
         check, declaration_lines: d.lines, evidence: { file: family.file, start_line: v.at.start_line, end_line: v.at.end_line, quote: v.at.quote, commit_sha: source.ref }, status: 'proposed' });
     }
     for (const m of list(answer.missing_predicates)) out.missing_predicates.push({ family_id: family.family_id, text: text(m?.text, 200), reason: text(m?.reason, 200) });
