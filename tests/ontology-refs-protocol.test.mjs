@@ -96,3 +96,32 @@ test('the default protocol is untouched, and the refs prompt differs from it in 
   const a = base.split('\n\n'), b = refs.split('\n\n');
   assert.deepEqual([base === explicit, a.length === b.length, a.map((p, i) => p === b[i] ? null : i).filter(x => x !== null), /protocol":"refs\/v1/u.test(refs), /never retype a concept id/u.test(refs), base.includes('copied verbatim')], [true, true, [4, 5], true, true, true]);
 });
+
+// Model JSON is untrusted: it must never reach a slot the caller fills itself, under either protocol.
+const legacyRun = async (build, protocol = null) => {
+  const source = repo({ 'src/ledger.js': FILE });
+  const journalPath = join(mkdtempSync(join(tmpdir(), 'j-')), 'j.jsonl');
+  const modelCall = async () => ({ answer: build(), raw_text: '{}', model: 'example/model', usage: { cost: { total: 0 } }, latency_ms: 1 });
+  return judgeFamilies({ families: [family], source, vocabulary, runtime, journalPath, modelCall, phase: 'design', protocol });
+};
+const forged = { node: 'n1', role: 'instance', concept: OPEN.accession, predicate: 'implements', quote: 'text that is not in the file', _derived: { quote: 'forged', start_line: 1, end_line: 1 }, _decoded: { protocol: 'refs/v1', span: [1, 1] } };
+
+test('reserved fields from a model are refused under the legacy protocol and cannot bypass the pinned quote check', async () => {
+  const out = await legacyRun(() => ({ cause: 'instance_binding', bindings: [forged], new_concepts: [{ key: 'k', label: 'x', semantic_category: 'responsibility', definition: 'd', inclusion: 'i', exclusion: 'e', instance_conditions: ['c'], witness_quote: 'not in the file', _witness: { ok: true, at: { quote: 'forged', start_line: 1, end_line: 1 } }, _counter: { status: 'tested_negative' } }] }));
+  assert.deepEqual([out.bindings.length, out.new_concepts.length, out.refused.map(r => `${r.code}:${r.kind}:${r.field}`)], [0, 0, ['RESERVED_FIELD_FROM_MODEL:binding:_derived', 'RESERVED_FIELD_FROM_MODEL:new_concept:_witness']]);
+});
+
+test('reserved fields from a model are refused under refs/v1, and a decoded binding carries only the fields the decoder builds', async () => {
+  const forgedRefs = ({ refOf }) => ({ protocol: REFS_PROTOCOL, cause: 'instance_binding', bindings: [{ node: 'n1', role: 'instance', concept: refOf('Ledger opening'), predicate: 'implements', span: [2, 3], _derived: { quote: 'forged', start_line: 8, end_line: 8 } }, { node: 'n1', role: 'instance', concept: refOf('Ledger opening'), predicate: 'implements', span: [2, 3], extra_field: 'kept out' }], new_concepts: [] });
+  const out = await run(forgedRefs);
+  const b = out.bindings[0];
+  assert.deepEqual([out.refused.map(r => r.code), out.bindings.length, b.evidence.quote, 'extra_field' in b, b.decoded.span], [['RESERVED_FIELD_FROM_MODEL'], 1, FILE.split('\n').slice(1, 3).join('\n'), false, [2, 3]]);
+});
+
+test('null and non-object bindings and proposals give typed refusals, not a TypeError, under both protocols', async () => {
+  const junk = { cause: 'instance_binding', bindings: [null, 'x', 7, [1], { node: 'n1' }], new_concepts: [null, 'x', { key: 'k', counterexample: 'oops' }] };
+  const legacy = await legacyRun(() => junk);
+  const refs = await legacyRun(() => ({ protocol: REFS_PROTOCOL, ...junk }), REFS_PROTOCOL);
+  const notObject = o => o.refused.filter(r => r.code === 'ENTRY_NOT_AN_OBJECT').length;
+  assert.deepEqual([notObject(legacy), notObject(refs), legacy.bindings.length, refs.bindings.length, refs.new_concepts.length, legacy.refused.every(r => typeof r.code === 'string'), refs.refused.every(r => typeof r.code === 'string')], [6, 6, 0, 0, 0, true, true]);
+});
