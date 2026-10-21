@@ -37,10 +37,23 @@ export function createOntologyMap({ explored, details, binding, coverage, querie
     note: 'Every admitted graph node, claim records included, is listed beneath this node so it can be opened. Only nodes a cited passage anchors, owns or participates with count as reached; that is a navigation reach, not a semantic score. Inventory files and discovery units are other denominators and are not graph nodes.' });
   const groupNode = i => { const g = groups[i], ids = g.domains.flatMap(d => D[d].members); return node(gid(i), 'OntologyGroup', g.label, { reviewed: false, definition: g.definition, domains: g.domains.length, concepts: ids.length, evidence_basis: basis(sum(ids)) }); };
   const domainNode = i => { const d = D[i]; return node(`ontology:domain:${i}`, 'OntologyDomain', d.label, { reviewed: false, source: M.sources[d.source], model_label: d.kind, definition: clip(d.definition, 700), concepts: d.members.length, evidence_basis: basis(sum(d.members)) }); };
+  const gateOf = i => {
+    const recorded = M.concept_gates?.[i];
+    if (recorded) return recorded;
+    const index = C[i][3];
+    if (index === 4) return { status: 'held', evidence_class: null };
+    if (index === 2 || index === 3) return { status: 'proposed', evidence_class: 'claim' };
+    if (index === 0) return { status: 'proposed', evidence_class: 'observed code' };
+    return { status: 'proposed', evidence_class: null };
+  };
   const conceptNode = i => {
-    const c = C[i], k = details.get(c[0]);
-    return node(`ontology:concept:${i}`, 'OntologyConcept', c[1], { reviewed: false, inferred_kind: `${FORM_LABEL[M.forms[c[2]]?.id] ?? 'Unclassified'} (set by the mapper, not reviewed)`, evidence_basis: STAND_LABEL[c[3]] ?? 'Unknown',
-      cited_passages: c[7], source: M.sources[c[4]], domain: D[domainOf[i]]?.label ?? 'not placed in a domain', definition: clip(k?.definition, 700), human_decision_record: 'none captured (this does not show that no person decided)' });
+    const c = C[i], k = details.get(c[0]), gate = gateOf(i);
+    const status = gate.status === 'held' ? 'held' : STATUS;
+    return node(`ontology:concept:${i}`, 'OntologyConcept', c[1], { reviewed: false, status,
+      ...(gate.evidence_class ? { evidence_class: gate.evidence_class } : {}),
+      inferred_kind: `${FORM_LABEL[M.forms[c[2]]?.id] ?? 'Unclassified'} (set by the mapper, not reviewed)`, evidence_basis: STAND_LABEL[c[3]] ?? 'Unknown',
+      cited_passages: c[7], source: M.sources[c[4]], domain: D[domainOf[i]]?.label ?? 'not placed in a domain', definition: clip(k?.definition, 700), human_decision_record: 'none captured (this does not show that no person decided)' },
+    gate.evidence_class === 'claim' ? { plane: 'documentary' } : gate.evidence_class === 'observed code' ? { plane: 'observation' } : {});
   };
 
   const page = (rows, offset, limit) => rows.slice(offset, offset + limit);

@@ -60,7 +60,7 @@ p { margin: 0.4rem 0; max-width: 72ch; }
 .pill, .stamp, .predicate, .chip { display: inline-flex; align-items: center; gap: 0.3rem; font: 500 14px/1.3 var(--sans); border-radius: 999px; padding: 0.15rem 0.6rem; background: #e6e9ee; color: var(--text); border: 0; text-transform: none; letter-spacing: 0; }
 .stamp--source_observed, .stamp--supported, .step--located .pill { background: var(--ok-soft); color: var(--ok); }
 .stamp--documentary_claim, .stamp--comment_claim, .stamp--third_party_reference, .stamp--mixed, .stamp--partly_stale { background: var(--warn-soft); color: var(--warn); }
-.stamp--blocks_acceptance, .stamp--support_stale, .stamp--no_support, .step--no_located_evidence .pill { background: var(--bad-soft); color: var(--bad); }
+.stamp--blocks_acceptance, .stamp--support_stale, .stamp--no_support, .stamp--held, .step--no_located_evidence .pill { background: var(--bad-soft); color: var(--bad); }
 .step--proposed_link .pill { background: var(--accent-soft); color: #153a9c; }
 .predicate--member { background: var(--accent-soft); color: #153a9c; }
 

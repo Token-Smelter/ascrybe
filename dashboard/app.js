@@ -1,4 +1,4 @@
-import { graphDetailForEdge, graphDetailForNode, graphDetailText } from '/graph-detail.js';
+import { graphDetailForEdge, graphDetailForNode, graphDetailText, ontologyCanvasKind } from '/graph-detail.js';
 import { layeredLayout } from '/layered-layout.js';
 import { bundlesFor } from '/bundles.js';
 
@@ -145,7 +145,7 @@ function bindGraphDetail(element, detail) {
 }
 
 function shapeFor(node) {
-  const shape = kindShape[node.kind] || 'circle';
+  const shape = kindShape[ontologyCanvasKind(node)] || kindShape[node.kind] || 'circle';
   if (shape === 'rounded') return svgElement('rect', { x: -27, y: -12, width: 54, height: 24, rx: 8, class: 'node-shape' });
   if (shape === 'bundle') {
     // A bundle is a folded group of neighbours, drawn as a stacked pill carrying its count so the
@@ -226,7 +226,7 @@ function render() {
       class: `node${node.id === state.selectedId ? ' is-selected' : ''}`,
       transform: `translate(${point.x} ${point.y})`, tabindex: '0', role: 'button',
       'aria-label': graphDetailText(detail), 'aria-describedby': 'graph-detail',
-      'data-kind': node.kind, 'data-verdict': node.properties?.verdict || '',
+      'data-kind': ontologyCanvasKind(node) || node.kind, 'data-verdict': node.properties?.verdict || '',
     });
     group.append(shapeFor(node));
     const label = svgElement('text', {

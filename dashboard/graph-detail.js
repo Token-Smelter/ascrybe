@@ -16,6 +16,15 @@ function endpointLabel(id, nodes) {
   return label && label !== endpoint ? `${label} (${endpoint})` : endpoint;
 }
 
+// Flat ontology nodes carry a derived evidence class. The canvas uses the same shapes as
+// claims and observed code so a comment or a document is not drawn as code.
+export function ontologyCanvasKind(node) {
+  const evidenceClass = node?.properties?.evidence_class;
+  if (evidenceClass === 'claim') return 'Claim';
+  if (evidenceClass === 'observed code') return 'CodeFact';
+  return node?.kind ?? '';
+}
+
 export function graphDetailForNode(node) {
   const title = node?.label == null ? displayValue(node?.id) : displayValue(node.label);
   return {

@@ -9,6 +9,14 @@ const FORM_HELP = {
   type: 'A kind of thing whose instances are subjects.', theme: 'An aesthetic, narrative or meaning that sources describe.',
 };
 const STAND = ['Source-observed', 'Source and documents', 'Documents only', 'Code comments only', 'No located evidence'];
+const evidenceLabel = i => {
+  const gate = M?.concept_gates?.[i];
+  const index = M?.concepts?.[i]?.[3];
+  if (gate?.status === 'held' || index === 4) return 'held';
+  if (gate?.evidence_class === 'claim' || index === 2 || index === 3) return 'claim';
+  if (gate?.evidence_class === 'observed code' || index === 0) return 'observed code';
+  return null;
+};
 const STAND_CLASS = ['o', 'm', 'd', 'c', 'n'];
 const BASIS = { read_in_source: 'text observed in source', stated_in_source_comment: 'text observed in a source comment', stated_in_document: 'stated by a document', referenced_by_document: 'a document points at it without containing it' };
 const KIND = { conceptual_domain: 'Subject area', responsibility: 'Responsibility', process: 'Process', actor: 'Actor', scope: 'Scope' };
@@ -247,7 +255,7 @@ const FORM_ID = i => ['responsibility', 'policy', 'practice', 'strategy', 'type'
 function conceptRow(i, group) {
   const c = concept(i);
   return h('tr', {}, h('td', {}, a(cHref(i), c[1]), group === 'component' ? null : h('div', { class: 'src' }, M.schemes[c[5]].label)),
-    h('td', {}, group === 'form' ? null : tag(FORM[FORM_ID(c[2])] ?? 'Unclassified')), h('td', {}, tag(STAND[c[3]] ?? 'Unknown evidence')), h('td', { class: 'num' }, `${N(c[7])} passages`));
+    h('td', {}, group === 'form' ? null : tag(FORM[FORM_ID(c[2])] ?? 'Unclassified')), h('td', {}, tag(STAND[c[3]] ?? 'Unknown evidence'), evidenceLabel(i) ? tag(evidenceLabel(i)) : null), h('td', { class: 'num' }, `${N(c[7])} passages`));
 }
 
 function domainLinks(di) {
@@ -309,12 +317,12 @@ async function viewConcept(ci) {
   if (dom < 0) flags.push('The model did not place this concept in any domain.');
   const rels = relationRows(ci);
   const sections = [crumbs([{ text: 'Overview', href: '#/' }, dom >= 0 ? { text: d.label, href: dHref(dom) } : { text: 'Not placed' }, { text: sc.label }, { text: c[1] }]),
-    h('h1', {}, c[1]), h('div', { class: 'tags' }, tag(`Source: ${src(c[4])}`), tag(FORM[form] ?? 'Unclassified kind'), tag(STAND[c[3]] ?? 'Unknown evidence')),
+    h('h1', {}, c[1]), h('div', { class: 'tags' }, tag(`Source: ${src(c[4])}`), tag(FORM[form] ?? 'Unclassified kind'), tag(STAND[c[3]] ?? 'Unknown evidence'), evidenceLabel(ci) ? tag(evidenceLabel(ci)) : null),
     flags.length ? h('div', { class: 'status' }, h('strong', {}, 'Needs a look: '), flags.join(' ')) : h('div', { class: 'status status--plain' }, 'No issue raised by the recorded checks. That is not approval.'),
     graphEntry('concept', ci),
     h('h2', {}, 'What kind of statement this is'),
     h('dl', { class: 'facts-grid' }, setting('Inferred kind', FORM[form] ?? 'Unclassified', `${FORM_HELP[form] ?? ''} Assigned by the mapper from the sources; not reviewed.`),
-      setting('Evidence basis', STAND[c[3]] ?? 'Unknown', `${N(c[7])} cited passages, ${N(c[6])} assertions. Standing is recorded on each cited source.`),
+      setting('Evidence basis', evidenceLabel(ci) === 'claim' ? 'claim' : evidenceLabel(ci) === 'observed code' ? 'observed code' : STAND[c[3]] ?? 'Unknown', `${N(c[7])} cited passages, ${N(c[6])} assertions. Comment-only and document-only evidence is a claim, not observed code. A concept with no located evidence is held, not proposed.`),
       setting('Authority record of a human choice', 'None captured', 'This data holds no approval or sign-off for the concept. It does not show that no person made the choice: a source passage below may quote one, and every concept definition here is unreviewed. A rule or procedure in a document is not by itself a recorded choice.'),
       setting('Component', sc.label, sc.definition), dom >= 0 ? setting('Proposed domain', a(dHref(dom), d.label), d.definition) : setting('Proposed domain', 'Not placed', 'See Triage.'))];
   const detail = h('div', {}, h('p', { class: 'loading' }, 'Loading definition and source chain'));
