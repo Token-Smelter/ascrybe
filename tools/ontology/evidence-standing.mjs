@@ -26,9 +26,15 @@ export function projectedOccurrence(row, artifactKind = null) {
   return standing === row.standing ? row : { ...row, standing };
 }
 
-export function conceptEvidenceGate({ standing = null, evidence = [], storedStatus = 'proposed', artifactKindOf = () => null } = {}) {
+// Same occurrences standingOf counts: membership, and affirmative relating assertions.
+// A concept cited only by those rows still has located evidence.
+export function locatedAssertionOccurrences(assertions = []) {
+  return (assertions ?? []).filter(row => row?.occurrence && (row.membership || (!row.constitutive && row.polarity === 'affirm'))).map(row => row.occurrence);
+}
+
+export function conceptEvidenceGate({ standing = null, evidence = [], assertions = [], storedStatus = 'proposed', artifactKindOf = () => null } = {}) {
   const summary = standing?.summary ?? 'no_located_evidence';
-  const support = (evidence ?? []).filter(row => row && (row.role == null || row.role === 'support'));
+  const support = [...(evidence ?? []), ...locatedAssertionOccurrences(assertions)].filter(row => row && (row.role == null || row.role === 'support'));
   const classes = support.map(row => evidenceRowClass(row, artifactKindOf(row.artifact_id)));
   const only = kind => support.length > 0 && classes.every(item => item === kind);
   const has = kind => classes.includes(kind);
