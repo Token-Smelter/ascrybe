@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fixtureTest, mkdtempSync } from './helpers/fixture-lifecycle.mjs';
+
+const test = fixtureTest(import.meta.url);
 import { validateEntityAnalysisConfig } from '../tools/entity-analysis-config.mjs';
 import { deriveDomainPrepass } from '../tools/domain-prepass.mjs';
 import { readDomainPrepassReceipts } from '../tools/annotate.mjs';
