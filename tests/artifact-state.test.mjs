@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import { fixtureTest, mkdtempSync } from './helpers/fixture-lifecycle.mjs';
 import {
   STATE_LAYOUT, artifactRoot, directoryReceipt, initializeState, migrateState, snapshotState, verifyState,
 } from '../tools/artifact-state.mjs';
+
+const test = fixtureTest(import.meta.url);
 
 const scratch = process.env.ASCRYBE_SCRATCH_DIR || tmpdir();
 

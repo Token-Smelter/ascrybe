@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,18 +42,61 @@ export function fastTestFiles() {
   return Object.freeze(selected);
 }
 
+function scratchDirectories() {
+  return [...new Set([process.env.ASCRYBE_SCRATCH_DIR, process.env.TMPDIR, tmpdir()].filter(Boolean).map(dir => resolve(dir)))];
+}
+
+function scratchNames(dir) {
+  try { return readdirSync(dir); }
+  catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+export function scratchSnapshot() {
+  return scratchDirectories().map(dir => [dir, new Set(scratchNames(dir))]);
+}
+
+// Counts only. Names and directories stay out of the log: a scratch parent can hold unrelated roots.
+export function scratchDelta(before) {
+  const created = [];
+  const removed = [];
+  for (const [dir, prior] of before) {
+    const now = new Set(scratchNames(dir));
+    for (const name of now) if (!prior.has(name)) created.push(name);
+    for (const name of prior) if (!now.has(name)) removed.push(name);
+  }
+  const prefixes = {};
+  let unclassified = 0;
+  for (const name of created) {
+    const prefix = name.replace(/[A-Za-z0-9]{6}$/u, '');
+    if (/^[a-z0-9][a-z0-9-]{0,80}$/u.test(prefix)) prefixes[prefix] = (prefixes[prefix] || 0) + 1;
+    else unclassified += 1;
+  }
+  return { created: created.length, removed_preexisting: removed.length, prefixes, unclassified };
+}
+
 export function main() {
   const selected = fastTestFiles();
   console.log(`FAST TEST SCOPE: ${selected.length} tracked/self-contained files`);
   const deferred = fullAssetTestFiles(resolve(root, 'tests'));
   console.log(`FULL-ASSET TEST FILES DEFERRED: ${deferred.length ? deferred.join(', ') : 'none in this distribution'}`);
+  const before = scratchSnapshot();
   const result = spawnSync(process.execPath, ['--test', ...selected], {
     cwd: root,
     env: process.env,
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
-  process.exitCode = result.status ?? 1;
+  const delta = scratchDelta(before);
+  const preexisting = before.reduce((count, [, names]) => count + names.size, 0);
+  console.log(`SCRATCH_MEASURE preexisting=${preexisting} new=${delta.created} removed_preexisting=${delta.removed_preexisting} unclassified=${delta.unclassified} prefixes=${JSON.stringify(delta.prefixes)}`);
+  const status = result.status ?? 1;
+  // A shared scratch directory also receives roots from concurrent, unrelated processes, so a
+  // leak fails the run only where the directory is known to be private to it (for example CI).
+  const strict = process.env.ASCRYBE_SCRATCH_STRICT === '1';
+  process.exitCode = strict && status === 0 && delta.created !== 0 ? 1 : status;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

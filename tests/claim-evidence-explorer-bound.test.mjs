@@ -1,8 +1,10 @@
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import { fixtureTest, mkdtempSync } from './helpers/fixture-lifecycle.mjs';
+
+const test = fixtureTest(import.meta.url);
 
 import { renderClaimEvidenceExplorer } from '../tools/claim-evidence-explorer.mjs';
 

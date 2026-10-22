@@ -24,6 +24,9 @@ function scratchDir(prefix) {
   mkdirSync(base, { recursive: true });
   return mkdtempSync(join(base, prefix));
 }
+function ownedWork() {
+  return { workDirRoot: scratchDir('shape-eval-owned-') };
+}
 function git(dir, args) { return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }); }
 function initRepo(dir) {
   git(dir, ['init', '--quiet', '--initial-branch=main']);
@@ -103,7 +106,7 @@ test('[EVAL-HARNESS] content_edit case: verdict passes, records/merge digests ag
   const child = commit(repoDir, 'invented content edit');
   const caseSpec = { name: 'content-edit', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) };
 
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true, 'delta and forced-uncached reference facts and merged graphs must agree');
   assert.deepEqual(result.records, { missing: [], extra: [], stale: [] });
@@ -124,7 +127,7 @@ test('[EVAL-HARNESS] add case: canonical equality holds and the added file\u2019
   writeFileSync(join(repoDir, 'added.py'), 'def newly_added():\n    return 3\n');
   const child = commit(repoDir, 'invented add');
   const caseSpec = { name: 'add', change_shape: 'add', repositories: repositories(repoDir, parent, child) };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   assert.equal(result.scope.diff.added, 1);
@@ -136,7 +139,7 @@ test('[EVAL-HARNESS] delete case: canonical equality holds and the deleted file 
   git(repoDir, ['rm', '--quiet', 'app.py']);
   const child = commit(repoDir, 'invented delete');
   const caseSpec = { name: 'delete', change_shape: 'delete', repositories: repositories(repoDir, parent, child) };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   assert.equal(result.scope.diff.deleted, 1);
@@ -147,7 +150,7 @@ test('[EVAL-HARNESS] rename case: a rename is delete-plus-add (the design\u2019s
   git(repoDir, ['mv', 'app.py', 'renamed_app.py']);
   const child = commit(repoDir, 'invented rename');
   const caseSpec = { name: 'rename', change_shape: 'rename', repositories: repositories(repoDir, parent, child) };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   assert.equal(result.scope.diff.added, 1, 'a rename is delete-plus-add: the new path is added');
@@ -161,7 +164,7 @@ test('[EVAL-HARNESS] docs_only case: canonical equality holds; reuse is reported
   writeFileSync(join(repoDir, 'notes.md'), MD_NOTES_V2);
   const child = commit(repoDir, 'invented docs-only edit');
   const caseSpec = { name: 'docs-only', change_shape: 'docs_only', repositories: repositories(repoDir, parent, child) };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   // The claim under test is honesty, not a fixed number: docs-only must NOT be asserted as 100%
@@ -176,7 +179,7 @@ test('[EVAL-HARNESS] ignored_or_unrouted_only case: editing only the vendored (e
   writeFileSync(join(repoDir, 'node_modules', 'vendor', 'lib.js'), 'module.exports = function vendoredV2() { return 1; };\n');
   const child = commit(repoDir, 'invented vendor-only edit');
   const caseSpec = { name: 'ignored-only', change_shape: 'ignored_or_unrouted_only', repositories: repositories(repoDir, parent, child) };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   assert.equal(result.scope.diff.modified, 0, 'the excluded file must never appear in the in-scope diff at all');
@@ -189,7 +192,7 @@ test('[EVAL-HARNESS] a routed content edit mislabelled as ignored_or_unrouted_on
   writeFileSync(join(repoDir, 'app.py'), PY_SOURCE_V2);
   const child = commit(repoDir, 'invented content edit mislabelled as unrouted-only');
   const caseSpec = { name: 'mislabelled', change_shape: 'ignored_or_unrouted_only', repositories: repositories(repoDir, parent, child) };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'incomplete');
   assert.ok(result.verdict_reasons.some(reason => reason.includes('mislabelled')));
 });
@@ -201,8 +204,8 @@ test('[EVAL-HARNESS] chained_update: two sequential deltas (A\u2192B, B\u2192C) 
   writeFileSync(join(repoDir, 'gateway.mjs'), JS_SOURCE.replace('invented', 'invented-v2'));
   const shaC = commit(repoDir, 'invented hop 2');
 
-  const hop1 = await runChangeShapeCase({ name: 'chain-hop-1', change_shape: 'chained_update', repositories: repositories(repoDir, shaA, shaB) });
-  const hop2 = await runChangeShapeCase({ name: 'chain-hop-2', change_shape: 'chained_update', repositories: repositories(repoDir, shaB, shaC) });
+  const hop1 = await runChangeShapeCase({ name: 'chain-hop-1', change_shape: 'chained_update', repositories: repositories(repoDir, shaA, shaB) }, ownedWork());
+  const hop2 = await runChangeShapeCase({ name: 'chain-hop-2', change_shape: 'chained_update', repositories: repositories(repoDir, shaB, shaC) }, ownedWork());
   assert.equal(hop1.verdict, 'pass', JSON.stringify(hop1.verdict_reasons));
   assert.equal(hop2.verdict, 'pass', JSON.stringify(hop2.verdict_reasons));
   assert.equal(hop2.canonical_equal, true, 'accumulation across a SECOND hop (relative to a state itself reached by a prior update) must not silently diverge');
@@ -224,7 +227,7 @@ test('[EVAL-HARNESS] multi-repository fixture: a routed HTTP route + client call
       consumerDir, consumerParentRef: consumerParent, consumerChildRef: consumerParent,
     }),
   };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   assert.equal(result.merge.delta.status, 'ok', JSON.stringify(result.merge.delta));
@@ -269,7 +272,7 @@ test('[EVAL-HARNESS] same relative path in two repositories does not collide: ea
       'estate-beta': { path: repoBDir, parent_ref: repoBParent, child_ref: repoBParent },
     },
   };
-  const result = await runChangeShapeCase(caseSpec);
+  const result = await runChangeShapeCase(caseSpec, ownedWork());
   assert.equal(result.verdict, 'pass', JSON.stringify(result.verdict_reasons));
   assert.equal(result.canonical_equal, true);
   const deltaGraph = JSON.parse(readFileSync(join(result.work_dir, 'merge-out-delta', 'estate-graph.json'), 'utf8'));
@@ -302,7 +305,7 @@ test('[EVAL-HARNESS] reuse-none control: a never-seeded cache produces zero reus
   writeFileSync(join(repoDir, 'app.py'), PY_SOURCE_V2);
   const child = commit(repoDir, 'invented content edit for reuse-none control');
   const caseSpec = { name: 'reuse-none-source', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) };
-  const control = await runReuseNoneControl(caseSpec);
+  const control = await runReuseNoneControl(caseSpec, ownedWork());
   assert.equal(control.passed, true, control.reason);
   assert.equal(control.reused_count, 0);
   assert.equal(control.correctness_holds, true);
@@ -313,7 +316,7 @@ test('[EVAL-HARNESS] reuse-all control: every validated reuse-eligible unit is a
   writeFileSync(join(repoDir, 'app.py'), PY_SOURCE_V2);
   const child = commit(repoDir, 'invented content edit for reuse-all control');
   const caseSpec = { name: 'reuse-all-source', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) };
-  const control = await runReuseAllControl(caseSpec);
+  const control = await runReuseAllControl(caseSpec, ownedWork());
   if (control.passed === null) return; // no eligible unit in this fixture; documented, not hidden.
   assert.equal(control.passed, true, control.reason);
   assert.equal(control.missed_reuse.length, 0);
@@ -325,7 +328,7 @@ test('[EVAL-HARNESS] dropped-record control: a self-consistent but incomplete ca
   writeFileSync(join(repoDir, 'app.py'), PY_SOURCE_V2);
   const child = commit(repoDir, 'invented content edit for dropped-record control');
   const caseSpec = { name: 'dropped-record-source', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) };
-  const control = await runDroppedRecordControl(caseSpec);
+  const control = await runDroppedRecordControl(caseSpec, ownedWork());
   if (control.passed === null) return; // no multi-record unit in this fixture; documented, not hidden.
   assert.equal(control.forged_entry_passed_self_validation, true, 'the forged entry must be a REAL gap, not an input the cache already rejects');
   assert.equal(control.passed, true, control.reason);
@@ -338,7 +341,7 @@ test('[EVAL-HARNESS] reuse-all-stale control (the STALE reuse-all NEGATIVE, dist
   git(repoDir, ['rm', '--quiet', 'gateway.mjs']);
   const child = commit(repoDir, 'invented content edit plus delete for reuse-all-stale control');
   const caseSpec = { name: 'reuse-all-stale-source', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) };
-  const control = await runReuseAllStaleControl(caseSpec);
+  const control = await runReuseAllStaleControl(caseSpec, ownedWork());
   if (control.passed === null) return; // no modified/deleted file in this fixture; documented, not hidden.
   // Meta-control success means THIS SAME SCORER returned the expected failure reason — not a
   // separate self-declared passed flag. The intentionally-faulty stale-reuse-all candidate itself
@@ -353,7 +356,7 @@ test('[EVAL-HARNESS] corruption control: a tampered receipt digest is quarantine
   writeFileSync(join(repoDir, 'app.py'), PY_SOURCE_V2);
   const child = commit(repoDir, 'invented content edit for corruption control');
   const caseSpec = { name: 'corruption-source', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) };
-  const control = await runCorruptionControl(caseSpec);
+  const control = await runCorruptionControl(caseSpec, ownedWork());
   assert.equal(control.passed, true, control.reason);
   assert.equal(control.quarantined, true);
   assert.equal(control.recomputed_disposition, 'produced');
@@ -363,7 +366,7 @@ test('[EVAL-HARNESS] corruption control: a tampered receipt digest is quarantine
 test('[EVAL-HARNESS] runCaseManifest: an empty case manifest is incomplete, never a silent full pass', async () => {
   const manifestPath = join(scratchDir('empty-manifest-'), 'case-manifest.json');
   writeFileSync(manifestPath, JSON.stringify({ cases: [] }));
-  const result = await runCaseManifest(manifestPath, { runControls: false });
+  const result = await runCaseManifest(manifestPath, { runControls: false, ...ownedWork() });
   assert.equal(result.verdict, 'incomplete');
   assert.ok(result.verdict_reasons.length > 0);
 });
@@ -376,7 +379,7 @@ test('[EVAL-HARNESS] runCaseManifest: a manifest covering only one canonical cha
   writeFileSync(manifestPath, JSON.stringify({
     cases: [{ name: 'partial-coverage', change_shape: 'content_edit', repositories: repositories(repoDir, parent, child) }],
   }));
-  const result = await runCaseManifest(manifestPath, { runControls: false });
+  const result = await runCaseManifest(manifestPath, { runControls: false, ...ownedWork() });
   assert.equal(result.cases[0].verdict, 'pass');
   assert.equal(result.verdict, 'incomplete', 'missing coverage of the other 8 canonical change shapes must never silently report full evaluation success');
   assert.ok(result.coverage.missing.length > 0);
@@ -392,7 +395,7 @@ test('[EVAL-HARNESS] CLI: exit status reflects the actual run verdict, not a fix
   }));
   let status = 0;
   try {
-    execFileSync(process.execPath, [EVAL_CLI, '--case-manifest', manifestPath], { encoding: 'utf8' });
+    execFileSync(process.execPath, [EVAL_CLI, '--case-manifest', manifestPath, '--work-dir', scratchDir('shape-eval-owned-')], { encoding: 'utf8' });
   } catch (error) {
     status = error.status;
   }

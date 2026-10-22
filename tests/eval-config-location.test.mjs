@@ -1,13 +1,28 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import test from 'node:test';
+import nodeTest, { after } from 'node:test';
+import { fixtureScope } from './helpers/fixture-lifecycle.mjs';
 import { configPaths, defaultEvaluationConfig, evaluationScratchRoot, externalResultsPath } from '../tools/eval/cli.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const scratch = process.env.ASCRYBE_SCRATCH_DIR || tmpdir();
-const outside = mkdtempSync(join(scratch, 'eval-config-'));
+const scope = fixtureScope({ source: import.meta.url, name: 'eval-config' });
+const outside = scope.allocate(join(scratch, 'eval-config-'));
+let failed = false;
+const test = (name, options, body) => {
+  if (typeof options === 'function') { body = options; options = {}; }
+  return nodeTest(name, options, async t => {
+    try { return await body(t); }
+    catch (error) { failed = true; throw error; }
+  });
+};
+after(() => {
+  const outcomes = scope.finish({ failed });
+  const retained = outcomes.filter(row => row.event === 'retained');
+  if (retained.length) throw new Error(`fixture KEEP: ${JSON.stringify(retained)}; receipt: ${scope.receiptDir}`);
+});
 const configuration = {
   source_repository: '../estate', runtime_config: '../runtime.json', questions: 'questions.jsonl',
   keys: 'keys.jsonl', results_directory: 'results',

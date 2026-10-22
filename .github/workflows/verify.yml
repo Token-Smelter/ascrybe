@@ -22,6 +22,8 @@ jobs:
       - run: npm run setup
       - run: npm run build
       - run: node scripts/test-fast.mjs
+        env:
+          ASCRYBE_SCRATCH_STRICT: '1'
       # The registry-bound battery: a gate that exists but was never registered runs nowhere, and
       # this is the only check that notices. It short-circuits rather than quietly skipping.
       #

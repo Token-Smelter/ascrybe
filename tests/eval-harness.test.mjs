@@ -6,7 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import test from 'node:test';
+import { fixtureTest, mkdtempSync as allocateOwned } from './helpers/fixture-lifecycle.mjs';
+
+const test = fixtureTest(import.meta.url);
 import { fileURLToPath } from 'node:url';
 import { deriveKey, gitRepository } from '../tools/eval/derive-keys.mjs';
 import { judgeProse } from '../tools/eval/blind-judge.mjs';
@@ -68,7 +70,7 @@ test('publicQuestion admits only the closed prompt-safe question projection', ()
 });
 
 test('deriveKey_uses_committed_fixture_without_graph_surface', async () => {
-  const directory = mkdtempSync(join(scratch, 'eval-fixture-'));
+  const directory = allocateOwned(join(scratch, 'eval-fixture-'));
   cpSync(join(root, 'tests/fixtures/eval-repository'), directory, { recursive: true });
   for (const args of [['init'], ['config', 'user.email', 'fixture@example.test'], ['config', 'user.name', 'Fixture'], ['add', '.'], ['commit', '-m', 'Add fixture']]) {
     execFileSync('git', args, { cwd: directory, stdio: 'pipe' });

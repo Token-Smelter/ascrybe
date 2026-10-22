@@ -1,6 +1,6 @@
-import test from 'node:test';
+import { fixtureTest, mkdtempSync } from './helpers/fixture-lifecycle.mjs';
+const test = fixtureTest(import.meta.url);
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { prepassDocument, buildMentionNamespace } from '../tools/source-prepass.mjs';
@@ -40,7 +40,7 @@ test('candidate characterization injects adjacent context as exact required evid
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'main_clause'
     && row.locator.text.startsWith('Receiver-owned policy'));
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-context-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-context-'));
   let observedPrompt = '';
   const result = await runCandidateCharacterization({
     inventory: localInventory, inventories: localInventories,
@@ -79,7 +79,7 @@ test('candidate characterization injects adjacent context as exact required evid
 });
 
 async function run(handler, name, overrides = {}) {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), `candidate-${name}-`));
+  const directory = mkdtempSync(path.join(os.tmpdir(), `candidate-${name}-`));
   return runCandidateCharacterization({
     inventory, inventories, namespace, blockByAddress, snapshot,
     checkpointPath: path.join(directory, 'checkpoint.jsonl'),
@@ -123,7 +123,7 @@ test('provider retry is a new immutable attempt inside the same explicit materia
 });
 
 test('an explicit candidate follow-up label creates a new logical materialization', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-materialization-label-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-materialization-label-'));
   const execute = (name, materialization_label = null) => runCandidateCharacterization({
     inventory, inventories, namespace, blockByAddress, snapshot,
     checkpointPath: path.join(directory, `${name}.jsonl`),
@@ -163,7 +163,7 @@ test('a child obligation cannot select a sibling-clause unit handle', async () =
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'coordinated_clause'
     && row.locator.text.includes('worker'));
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-local-handle-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-local-handle-'));
   const result = await runCandidateCharacterization({
     inventory: localInventory,
     inventories: localInventories,
@@ -207,7 +207,7 @@ test('schema scalar handles cannot inherit an explicitly referenced nested prope
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'schema_constraint'
     && row.support_locator.text.startsWith('- id:'));
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-schema-owner-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-schema-owner-'));
   const result = await runCandidateCharacterization({
     inventory: localInventory, inventories: localInventories,
     namespace: buildMentionNamespace([localPrepass]),
@@ -250,7 +250,7 @@ test('a coordinated focus retains governing negation and a clause-local actor ha
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'coordinated_clause'
     && row.locator.text === 'secondary lookup occurs.');
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-scoped-focus-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-scoped-focus-'));
   const result = await runCandidateCharacterization({
     inventory: localInventory,
     inventories: localInventories,
@@ -295,7 +295,7 @@ test('a numbered-list ordinal focus inherits its exact item structural subject',
   const localInventories = [localPrepass.inventory];
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'ordinal_membership');
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-list-ordinal-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-list-ordinal-'));
   const result = await runCandidateCharacterization({
     inventory: localInventory, inventories: localInventories,
     namespace: buildMentionNamespace([localPrepass]),
@@ -347,7 +347,7 @@ test('candidate admission independently rejects a predicate phrase used as an ac
     units: built.units.map(row => row.id === unit.id ? unsafeUnit : row) };
   const localCandidate = unsafeInventory.obligations.find(row => row.source_unit_id === unit.id
     && row.obligation_kind === 'main_clause');
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-unsafe-actor-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-unsafe-actor-'));
   const result = await runCandidateCharacterization({
     inventory: unsafeInventory, inventories: [localPrepass.inventory],
     namespace: buildMentionNamespace([localPrepass]),
@@ -384,7 +384,7 @@ test('self-referential table cells cannot transfer dossier actions onto the row 
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'table_cell'
     && row.table_column_index === 2 && row.locator.text.startsWith('References only'));
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-table-owner-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-table-owner-'));
   const result = await runCandidateCharacterization({
     inventory: localInventory, inventories: localInventories,
     namespace: buildMentionNamespace([localPrepass]),
@@ -435,7 +435,7 @@ test('rank values cannot become table actors and the entity cell owns ordinal cl
   const localInventory = buildPropositionObligationInventory({ inventories: localInventories });
   const localCandidate = localInventory.obligations.find(row => row.obligation_kind === 'main_clause'
     && row.locator.text.includes('Specification-aware prefix monitor'));
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'candidate-table-rank-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'candidate-table-rank-'));
   const result = await runCandidateCharacterization({
     inventory: localInventory, inventories: localInventories,
     namespace: buildMentionNamespace([localPrepass]),

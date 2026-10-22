@@ -1,6 +1,6 @@
-import test from 'node:test';
+import { fixtureTest, mkdtempSync } from './helpers/fixture-lifecycle.mjs';
+const test = fixtureTest(import.meta.url);
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { prepassDocument, buildMentionNamespace } from '../tools/source-prepass.mjs';
@@ -103,7 +103,7 @@ test('repair audit accepts the exact legacy numeric trailer for replay compatibi
 });
 
 test('repair audit blinds repair metadata and exhaustively validates exact evidence', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'repair-audit-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'repair-audit-'));
   const handler = async ({ prompt }) => {
     assert.doesNotMatch(prompt, /TEST_REPAIR|claim-v33:/);
     const id = /"review_id":"([^"]+)"/.exec(prompt)[1];
