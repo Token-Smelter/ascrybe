@@ -77,6 +77,29 @@ const byAccession = (generation, accession) => generation.collections.flatMap(c 
 const graphConcept = (graph, accession) => graph.nodes.find(n => n.type === 'concept' && n.accession === accession);
 const graphSubject = (graph, referentId) => graph.nodes.find(n => n.type === 'subject' && n.referent_id === referentId);
 
+// The same harbor rows, moved into affirmative non-constitutive describes assertions. Collection
+// evidence is empty. Historical summaries still say source_observed.
+function describesAssertion(referentId, accession, row) {
+  const occurrence = { ...row };
+  delete occurrence.role;
+  delete occurrence.concept_accession;
+  return {
+    assertion_id: `ontology-assertion:${accession}`, referent_id: referentId, predicate: 'describes',
+    polarity: 'affirm', constitutive: false, membership: false, concept_accession: accession,
+    concept_version_id: `v:${accession}`, occurrence, status: 'proposed',
+  };
+}
+function assertionOnlyGeneration() {
+  const generation = sealedGeneration();
+  generation.assertions = [
+    describesAssertion('r:comment', 'c:comment', commentRow),
+    describesAssertion('r:doc', 'c:doc', documentRow),
+    describesAssertion('r:code', 'c:code', codeRow),
+  ];
+  generation.collections[0].evidence = [];
+  return generation;
+}
+
 test('a sealed generation is not rewritten when no located evidence is read as held', () => {
   const generation = sealedGeneration();
   const before = structuredClone(generation);
@@ -208,6 +231,81 @@ test('the evidence-graph UI holds a concept with no located evidence and shows c
   const code = show('c:code');
   assert.equal(code.column, 'Concepts from source');
   assert.match(code.text + code.inspector, /observed code/);
+});
+
+test('assertion-only comment and document evidence is a claim, not observed code, in the read model and rendered graph', async () => {
+  const generation = assertionOnlyGeneration();
+  const before = structuredClone(generation);
+  const view = discoveryViewModel(generation);
+  const graph = evidenceGraph({ generations: [generation] });
+  assert.deepEqual(generation, before);
+  assert.equal(generation.assertions.find(a => a.concept_accession === 'c:comment').occurrence.standing, 'source_observed');
+  assert.equal(generation.collections[0].evidence.length, 0);
+  for (const accession of ['c:comment', 'c:doc']) {
+    const viewed = byAccession(view, accession);
+    const drawn = graphConcept(graph, accession);
+    const occurrence = viewed.assertions[0].occurrence;
+    assert.equal(viewed.evidence.length, 0);
+    assert.equal(viewed.evidence_class, 'claim');
+    assert.notEqual(viewed.evidence_class, 'observed code');
+    assert.equal(occurrence.evidence_class, 'claim');
+    assert.notEqual(occurrence.standing, 'source_observed');
+    assert.equal(drawn.evidence_class, 'claim');
+    assert.notEqual(drawn.evidence_class, 'observed code');
+    assert.notEqual(drawn.side, 'observed');
+    assert.equal(viewed.status, 'proposed');
+  }
+  assert.equal(byAccession(view, 'c:comment').assertions[0].occurrence.standing, 'comment_claim');
+  assert.equal(byAccession(view, 'c:doc').assertions[0].occurrence.standing, 'documentary_claim');
+  const code = graphConcept(graph, 'c:code');
+  assert.equal(code.evidence_class, 'observed code');
+  assert.equal(code.side, 'observed');
+  assert.equal(graphSubject(graph, 'r:comment').evidence_class, 'claim');
+  assert.notEqual(graphSubject(graph, 'r:comment').group, 'observed');
+  assert.equal(graphSubject(graph, 'r:doc').evidence_class, 'claim');
+  assert.equal(graphSubject(graph, 'r:code').evidence_class, 'observed code');
+  const explored = exploreModel({ view, reconcile: {
+    domains: [{ domain_id: 'd:1', source_id: 'harbor', label: 'Docks', kind: 'process', definition: 'x', members: ['c:comment', 'c:doc', 'c:code'] }],
+    themes: [{ label: 'Harbor', definition: 'y', domains: ['d:1'] }], paths: [], unplaced: [],
+    summary: { coverage: {}, clusters: {} }, clusters: [], traces: [],
+  } });
+  const gate = accession => explored.concept_gates[explored.concepts.findIndex(row => row[0] === accession)];
+  assert.equal(gate('c:comment').evidence_class, 'claim');
+  assert.equal(gate('c:doc').evidence_class, 'claim');
+  assert.notEqual(explored.concepts.find(row => row[0] === 'c:comment')[3], 0);
+  assert.notEqual(explored.concepts.find(row => row[0] === 'c:doc')[3], 0);
+  const coverage = { admitted: 0, reached: 0, share: 0, label: 'no reach is claimed', counts: {}, unplacedReasons: {}, dispositions: () => [], repositories: () => [], page: async () => [], explain: async () => null, isReached: () => false, byPlane: {}, denominators: {} };
+  const map = createOntologyMap({ explored, details: new Map(), binding: null, coverage, queries: {}, view: 'working', projection: { projection_id: 'p' } });
+  const mapped = await Promise.all([1, 2, 3].map(i => map.node(`ontology:concept:${i}`)));
+  assert.equal(mapped[0].node.properties.evidence_class, 'claim');
+  assert.equal(mapped[1].node.properties.evidence_class, 'claim');
+  assert.notEqual(mapped[0].node.properties.evidence_class, 'observed code');
+  assert.equal(mapped[2].node.properties.evidence_class, 'observed code');
+  assert.equal(graphDetailForNode(mapped[0].node).fields.find(field => field.label === 'evidence class')?.value, 'claim');
+  globalThis.requestAnimationFrame = () => 0;
+  const ui = createGraphView({
+    h, svg: h, words: value => String(value ?? '').replaceAll('_', ' '), short: value => String(value ?? ''),
+    quoteBlock: row => row.quote, pinText: row => row.path, stamp: value => value,
+  });
+  ui.load(graph);
+  const detail = { replaceChildren(node) { this.child = node; } };
+  const rail = { replaceChildren() {} };
+  const show = accession => {
+    const node = graphConcept(graph, accession);
+    ui.applyRoute(['focus', node.id]);
+    ui.render(detail, rail);
+    return { column: columnOf(detail.child, node.id), text: textOf(findId(detail.child, node.id)), inspector: textOf(detail.child) };
+  };
+  for (const accession of ['c:comment', 'c:doc']) {
+    const shown = show(accession);
+    assert.equal(shown.column, 'Concepts from statements');
+    assert.notEqual(shown.column, 'Concepts from source');
+    assert.match(shown.text + shown.inspector, /\bclaim\b/);
+    assert.doesNotMatch(`${shown.column} ${shown.text}`, /observed code/);
+  }
+  const shownCode = show('c:code');
+  assert.equal(shownCode.column, 'Concepts from source');
+  assert.match(shownCode.text + shownCode.inspector, /observed code/);
 });
 
 test('the flat graph canvas classifies comment-only and document-only concepts as claims, not observed code', async () => {

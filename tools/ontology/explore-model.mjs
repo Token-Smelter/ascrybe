@@ -1,7 +1,7 @@
 // Derived, read-only model for the explorer page. It reindexes what the generation, the estate view and the reconciliation already
 // say. Groupings are the model's proposals. Evidence class is derived at read time from the recorded standing, so a comment or a
 // document is not indexed as observed code, and a concept with no located evidence is held. Nothing here is accepted.
-import { conceptEvidenceGate, evidenceRowClass, standingIndexForGate } from './evidence-standing.mjs';
+import { conceptEvidenceGate, evidenceRowClass, locatedAssertionOccurrences, standingIndexForGate } from './evidence-standing.mjs';
 const STANDINGS = ['source_observed', 'mixed', 'documentary_claim', 'comment_claim', 'no_located_evidence'];
 const FORMS = ['responsibility', 'policy', 'practice', 'strategy', 'type', 'theme'];
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s ?? '');
@@ -21,10 +21,10 @@ export function exploreModel({ view, estate = null, reconcile = null, predicates
         index.set(k.accession, concepts.length);
         // [accession, label, form, standing, source, scheme, assertions, evidence, blockers, stale support]
         conceptEvidence.push(k.evidence.map(e => ({ evidence_id: e.evidence_id, repository: e.repository, path: e.path, commit_sha: e.commit_sha, blob_oid: e.blob_oid, start_line: e.start_line, end_line: e.end_line })));
-        const classes = (k.evidence ?? []).map(e => evidenceRowClass(e, artifactKind.get(e.artifact_id)));
+        const classes = [...(k.evidence ?? []), ...locatedAssertionOccurrences(k.assertions)].map(e => evidenceRowClass(e, artifactKind.get(e.artifact_id)));
         const gate = k.status != null && Object.hasOwn(k, 'evidence_class')
           ? { status: k.status, evidence_class: k.evidence_class ?? null }
-          : conceptEvidenceGate({ standing: k.standing, evidence: k.evidence, storedStatus: k.status, artifactKindOf: id => artifactKind.get(id) ?? null });
+          : conceptEvidenceGate({ standing: k.standing, evidence: k.evidence, assertions: k.assertions, storedStatus: k.status, artifactKindOf: id => artifactKind.get(id) ?? null });
         conceptGates.push({ status: gate.status, evidence_class: gate.evidence_class });
         concepts.push([k.accession, k.label, FORMS.indexOf(k.semantic_category), standingIndexForGate(STANDINGS.indexOf(k.standing?.summary), gate, classes), si, schemeIdx,
           k.assertions.length, k.evidence.length, k.blockers.length, k.currentness?.support_stale ?? 0]);

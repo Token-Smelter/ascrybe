@@ -1222,12 +1222,14 @@ export function discoveryViewModel(generation) {
   const referentById = new Map(generation.referents.map(r => [r.referent_id, r]));
   const standing = new Map(generation.concept_standing.map(s => [s.accession, s.standing]));
   const artifactKind = new Map((generation.source_artifacts ?? []).map(a => [a.artifact_id, a.kind]));
-  const projectEvidence = rows => rows.map(row => {
+  const projectRow = row => {
+    if (!row) return row;
     const projected = projectedOccurrence(row, artifactKind.get(row.artifact_id));
     const kind = evidenceRowClass(projected, artifactKind.get(row.artifact_id));
     const evidence_class = kind === 'comment' || kind === 'document' ? 'claim' : kind === 'code' ? 'observed code' : null;
     return evidence_class == null && projected === row ? row : { ...projected, evidence_class };
-  });
+  };
+  const projectEvidence = rows => rows.map(projectRow);
   // Lookups are grouped once: an estate-scale generation has tens of thousands of referents and assertions.
   const assertionsByConcept = Map.groupBy(generation.assertions, a => a.concept_accession);
   const assertionsByReferent = Map.groupBy(generation.assertions, a => a.referent_id);
@@ -1236,7 +1238,7 @@ export function discoveryViewModel(generation) {
     const r = referentById.get(a.referent_id);
     return { assertion_id: a.assertion_id, predicate: a.predicate, polarity: a.polarity, constitutive: a.constitutive,
       membership: a.membership, referent_id: a.referent_id, referent: r?.name, referent_kind: r?.kind, denotes: r?.denotes,
-      basis: r?.basis, held_out: r?.held_out ?? false, occurrence: a.occurrence };
+      basis: r?.basis, held_out: r?.held_out ?? false, occurrence: projectRow(a.occurrence) };
   });
   const decisions = [
     ...generation.collections.flatMap(c => c.concepts.map(x => ({ decision_kind: 'accept_reject_or_refine_concept',
@@ -1258,8 +1260,8 @@ export function discoveryViewModel(generation) {
     referents: (referentsByArtifact.get(`${a.collection_id}\u0000${a.artifact_id}`) ?? [])
       .map(r => ({ referent_id: r.referent_id, kind: r.kind, name: r.name, denotes: r.denotes, basis: r.basis, coverage: r.coverage,
         instance_status: r.instance_status ?? null,
-        occurrence: r.occurrence, assertions: (assertionsByReferent.get(r.referent_id) ?? [])
-          .map(x => ({ predicate: x.predicate, polarity: x.polarity, membership: x.membership, concept_accession: x.concept_accession, occurrence: x.occurrence })) })) }));
+        occurrence: projectRow(r.occurrence), assertions: (assertionsByReferent.get(r.referent_id) ?? [])
+          .map(x => ({ predicate: x.predicate, polarity: x.polarity, membership: x.membership, concept_accession: x.concept_accession, occurrence: projectRow(x.occurrence) })) })) }));
   return Object.freeze({ schema: 'estate-map/ontology-view-model/v3', generation_id: generation.generation_id,
     context_id: generation.context_id, prior_generation_id: generation.prior_generation_id,
     status: generation.status, accepted: generation.acceptance.accepted,
@@ -1274,6 +1276,7 @@ export function discoveryViewModel(generation) {
           instance_conditions: x.instance_conditions ?? [],
           aliases: x.aliases, origin: x.origin, standing: standing.get(x.accession),
           ...conceptEvidenceGate({ standing: standing.get(x.accession), evidence: c.evidence.filter(e => e.concept_accession === x.accession),
+            assertions: assertionsByConcept.get(x.accession) ?? [],
             storedStatus: x.status, artifactKindOf: id => artifactKind.get(id) ?? null }),
           currentness: currentnessOf(x, c, generation),
           constitutive_predicates: CONCEPT_CATEGORIES[x.semantic_category].constitutive,

@@ -71,6 +71,7 @@ export function evidenceGraph({ generations, alignment = null }) {
 
   for (const g of generations) {
     const standingOf = new Map(g.concept_standing.map(s => [s.accession, s.standing]));
+    const assertionsByConcept = Map.groupBy(g.assertions ?? [], a => a.concept_accession);
     const artifactById = new Map(g.source_artifacts.map(a => [a.artifact_id, a]));
     const artifactKindOf = id => artifactById.get(id)?.kind ?? null;
     const projectOcc = occ => projectedOccurrence(occ, artifactKindOf(occ?.artifact_id));
@@ -85,7 +86,7 @@ export function evidenceGraph({ generations, alignment = null }) {
       for (const k of c.concepts) {
         const standing = standingOf.get(k.accession);
         const support = c.evidence.filter(e => e.concept_accession === k.accession && e.role === 'support');
-        const gate = conceptEvidenceGate({ standing, evidence: support, storedStatus: k.status, artifactKindOf });
+        const gate = conceptEvidenceGate({ standing, evidence: support, assertions: assertionsByConcept.get(k.accession) ?? [], storedStatus: k.status, artifactKindOf });
         const stale = g.findings.filter(f => f.kind === 'stale_evidence' && f.concept_accession === k.accession && f.role === 'support').length;
         const id = conceptKey(g.generation_id, k.accession);
         nodes.set(id, { id, type: 'concept', label: k.label, category: k.semantic_category, definition: k.definition, inclusion: k.inclusion, exclusion: k.exclusion,
