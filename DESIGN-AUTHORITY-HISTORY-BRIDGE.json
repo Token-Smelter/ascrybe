@@ -2,5 +2,5 @@
   "schema": "ascrybe/public-document-snapshot/v1",
   "scope": "Published documentation only; no claims about unpublished records or unavailable history.",
   "verification": "Snapshot bytes are verifiable without Git; commit provenance is checked only with available Git history.",
-  "ledger_sha256": "a48745f4b7e309444f9aad03afd5ebb87fe9db5af012d9b07e20d341b3fe033c"
+  "ledger_sha256": "d23240a5b0cef8f8071ee479995d03dc84743c0390fa04c2b191fab7e660d49b"
 }
