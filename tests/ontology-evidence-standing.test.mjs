@@ -321,3 +321,11 @@ test('the flat graph canvas classifies comment-only and document-only concepts a
   assert.match(candidate, /evidence_class/);
   assert.match(explorer, /concept_gates|evidence_class/);
 });
+
+test('a concept supported only by a comment and a document together is a claim, not unclassified', async () => {
+  const { conceptEvidenceGate } = await import('../tools/ontology/evidence-standing.mjs');
+  const evidence = [{ ...commentRow, standing: 'comment_claim' }, { ...documentRow, standing: 'documentary_claim' }];
+  const gates = ['mixed', 'comment_claim', 'documentary_claim'].map(summary => conceptEvidenceGate({ standing: { summary }, evidence }));
+  const withCode = conceptEvidenceGate({ standing: { summary: 'mixed' }, evidence: [...evidence, codeRow] });
+  assert.deepEqual([gates.map(g => g.evidence_class), withCode.evidence_class], [['claim', 'claim', 'claim'], null]);
+});

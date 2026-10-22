@@ -40,11 +40,12 @@ export function conceptEvidenceGate({ standing = null, evidence = [], assertions
   const has = kind => classes.includes(kind);
   // Rows override a stored source_observed summary: a comment in a code file, or a document
   // whose row was labelled as source, is not observed code. A stored summary still decides when
-  // the generation did not keep per-row standings.
-  const commentOnly = only(COMMENT) || (summary === 'comment_claim' && !has(CODE) && !has(DOCUMENT));
-  const documentOnly = only(DOCUMENT) || ((summary === 'documentary_claim' || summary === 'third_party_reference') && !has(CODE) && !has(COMMENT));
-  const observedCode = !commentOnly && !documentOnly && (summary === 'source_observed' || only(CODE));
-  const evidence_class = commentOnly || documentOnly ? 'claim' : observedCode ? 'observed code' : null;
+  // the generation did not keep per-row standings. Comments and documents together are still claims.
+  const claimRows = support.length > 0 && classes.every(item => item === COMMENT || item === DOCUMENT);
+  const claimSummary = (summary === 'comment_claim' || summary === 'documentary_claim' || summary === 'third_party_reference') && !has(CODE);
+  const claim = claimRows || claimSummary;
+  const observedCode = !claim && (summary === 'source_observed' || only(CODE));
+  const evidence_class = claim ? 'claim' : observedCode ? 'observed code' : null;
   const status = summary === 'no_located_evidence' || storedStatus === 'held' ? 'held' : 'proposed';
   return Object.freeze({ status, evidence_class });
 }
