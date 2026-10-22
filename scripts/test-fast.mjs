@@ -93,7 +93,10 @@ export function main() {
   const preexisting = before.reduce((count, [, names]) => count + names.size, 0);
   console.log(`SCRATCH_MEASURE preexisting=${preexisting} new=${delta.created} removed_preexisting=${delta.removed_preexisting} unclassified=${delta.unclassified} prefixes=${JSON.stringify(delta.prefixes)}`);
   const status = result.status ?? 1;
-  process.exitCode = status === 0 && delta.created !== 0 ? 1 : status;
+  // A shared scratch directory also receives roots from concurrent, unrelated processes, so a
+  // leak fails the run only where the directory is known to be private to it (for example CI).
+  const strict = process.env.ASCRYBE_SCRATCH_STRICT === '1';
+  process.exitCode = strict && status === 0 && delta.created !== 0 ? 1 : status;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
