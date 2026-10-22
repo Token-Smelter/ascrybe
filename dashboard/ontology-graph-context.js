@@ -95,7 +95,13 @@ function installInspector(app, info) {
 
   async function ontologyNode(node, view) {
     const [, type, a] = node.id.split(':');
-    const kids = [heading('About this ontology node'), note('A proposal from the mapper, not reviewed. It is not part of the observed graph. Source nodes are reached from its evidence and from the coverage node.')];
+    const held = node.properties?.status === 'held';
+    const claim = node.properties?.evidence_class === 'claim';
+    const kids = [heading('About this ontology node'), note(held
+      ? 'Held: no located evidence was found. This concept is not proposed.'
+      : claim
+        ? 'A claim from comments or documents, not observed code. It is not part of the observed graph.'
+        : 'A proposal from the mapper, not reviewed. It is not part of the observed graph. Source nodes are reached from its evidence and from the coverage node.')];
     if (type === 'concept' || type === 'domain') kids.push(el('p', {}, el('a', { href: `/explore#/${type}/${a}` }, 'Open in the ontology explorer')));
     if (type === 'concept') {
       const list = el('ul', { class: 'ontology-list' });

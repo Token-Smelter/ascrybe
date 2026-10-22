@@ -67,7 +67,14 @@ export function createGraphView({ h, svg, words, short, quoteBlock, pinText, sta
 
   function layout(view) {
     const cols = new Map(COLUMNS.map(c => [c.id, []]));
-    const colOf = n => (n.type === 'concept' ? (n.side === 'observed' ? 'observed-concept' : 'statement-concept') : n.group === 'observed' ? 'observed-subject' : 'statement-subject');
+    const colOf = n => {
+      if (n.type === 'concept') {
+        if (n.evidence_class === 'observed code') return 'observed-concept';
+        if (n.evidence_class === 'claim' || n.status === 'held' || n.side !== 'observed') return 'statement-concept';
+        return 'observed-concept';
+      }
+      return n.evidence_class === 'observed code' || n.group === 'observed' ? 'observed-subject' : 'statement-subject';
+    };
     for (const id of view.ids) { const n = S.nodes.get(id); if (n && (n.type === 'concept' || S.collections.has(n.collection_id))) cols.get(colOf(n)).push(n); }
     return COLUMNS.map(c => ({ ...c, nodes: cols.get(c.id).sort((a, b) => String(a.label).localeCompare(b.label)) })).filter(c => c.nodes.length);
   }
@@ -75,11 +82,14 @@ export function createGraphView({ h, svg, words, short, quoteBlock, pinText, sta
   function nodeButton(n, view) {
     const concept = n.type === 'concept';
     const statusText = concept ? (n.currentness.state === 'supported' ? null : words(n.currentness.state)) : n.evidence_kind.label;
+    const classText = n.evidence_class === 'claim' ? 'claim' : n.evidence_class === 'observed code' ? 'observed code' : null;
     return h('button', { type: 'button', class: `node node--${concept ? `concept node--${n.category}` : n.kind === 'decision' ? 'decision' : n.group}${S.selected === n.id ? ' is-selected' : ''}`, 'data-id': n.id,
       'aria-pressed': String(S.selected === n.id), onclick: () => { S.selected = n.id; render(); },
       ondblclick: () => route('focus', n.id) },
     h('span', { class: 'node__kind' }, icon(iconFor(n)), kindOf(n)),
     h('span', { class: 'node__name' }, n.label),
+    n.status === 'held' ? h('span', { class: 'node__note' }, 'held') : null,
+    classText ? h('span', { class: 'node__note' }, classText) : null,
     statusText ? h('span', { class: 'node__note' }, statusText) : null,
     !concept && n.basis === 'referenced_by_document' ? h('span', { class: 'node__note' }, 'Referenced, not read') : null,
     concept && view.hidden.has(n.id) ? h('span', { class: 'node__more', role: 'button', tabindex: '0', onclick: e => { e.stopPropagation(); S.expanded.add(n.id); render(); },
@@ -143,6 +153,8 @@ export function createGraphView({ h, svg, words, short, quoteBlock, pinText, sta
         h('h3', {}, `Supporting excerpts (${node.support.length})`), node.support.length ? node.support.map(e => h('div', { class: 'excerpt' }, quoteBlock(e), h('p', { class: 'src' }, [pinText(e), ' · ', words(e.standing)]))) : h('p', { class: 'muted' }, 'No supporting excerpt is located at a pin.'),
         h('h3', {}, `Subjects asserted to it (${asserted.length})`),
         h('ul', { class: 'plain' }, asserted.slice(0, 12).map(e => h('li', {}, h('button', { type: 'button', class: 'linkish', onclick: () => { S.selected = e.id; render(); } }, `${S.nodes.get(e.from).label} ${e.label}`)))),
+        node.status === 'held' ? h('p', {}, 'Status: held. This concept is not proposed.') : null,
+        node.evidence_class ? h('p', {}, `Classification: ${node.evidence_class}`) : null,
         statusBlock({ source_quote_located: node.support.some(e => e.validation.source_quote_located) }, `Concept standing: ${words(node.standing)}`, false),
         h('p', {}, h('button', { type: 'button', class: 'btn', onclick: () => route('focus', node.id) }, 'Focus the graph on this concept')),
         details([['Concept id', node.accession], ['Version', node.version_id], ['Generation', node.generation_id], ['Origin', node.origin]]));

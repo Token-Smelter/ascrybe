@@ -11,6 +11,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { assertOutboundSafe } from './jev-classifier.mjs';
+import { conceptEvidenceGate, evidenceRowClass, projectedOccurrence } from './evidence-standing.mjs';
 import { canonical, fail } from './schemas.mjs';
 
 export const DISCOVERY_CORPUS_SCHEMA = 'estate-map/ontology-discovery-corpus/v1';
@@ -1220,6 +1221,13 @@ export function discoveryViewModel(generation) {
   if (!PRIOR_SCHEMAS.includes(generation?.schema)) fail('DISCOVERY_GENERATION_INVALID', 'sealed v3 or v4 discovery generation required');
   const referentById = new Map(generation.referents.map(r => [r.referent_id, r]));
   const standing = new Map(generation.concept_standing.map(s => [s.accession, s.standing]));
+  const artifactKind = new Map((generation.source_artifacts ?? []).map(a => [a.artifact_id, a.kind]));
+  const projectEvidence = rows => rows.map(row => {
+    const projected = projectedOccurrence(row, artifactKind.get(row.artifact_id));
+    const kind = evidenceRowClass(projected, artifactKind.get(row.artifact_id));
+    const evidence_class = kind === 'comment' || kind === 'document' ? 'claim' : kind === 'code' ? 'observed code' : null;
+    return evidence_class == null && projected === row ? row : { ...projected, evidence_class };
+  });
   // Lookups are grouped once: an estate-scale generation has tens of thousands of referents and assertions.
   const assertionsByConcept = Map.groupBy(generation.assertions, a => a.concept_accession);
   const assertionsByReferent = Map.groupBy(generation.assertions, a => a.referent_id);
@@ -1264,10 +1272,13 @@ export function discoveryViewModel(generation) {
           accession: x.accession, version_id: x.version_id, semantic_category: x.semantic_category, label: x.label,
           definition: x.definition, inclusion: x.inclusion, exclusion: x.exclusion, domain: x.domain, invariants: x.invariants,
           instance_conditions: x.instance_conditions ?? [],
-          aliases: x.aliases, origin: x.origin, standing: standing.get(x.accession), currentness: currentnessOf(x, c, generation),
+          aliases: x.aliases, origin: x.origin, standing: standing.get(x.accession),
+          ...conceptEvidenceGate({ standing: standing.get(x.accession), evidence: c.evidence.filter(e => e.concept_accession === x.accession),
+            storedStatus: x.status, artifactKindOf: id => artifactKind.get(id) ?? null }),
+          currentness: currentnessOf(x, c, generation),
           constitutive_predicates: CONCEPT_CATEGORIES[x.semantic_category].constitutive,
           assertions: asserted(x.accession),
-          evidence: c.evidence.filter(e => e.concept_accession === x.accession),
+          evidence: projectEvidence(c.evidence.filter(e => e.concept_accession === x.accession)),
           pending_changes: c.changes.filter(ch => ch.accessions.includes(x.accession)),
           blockers: generation.acceptance_blockers.filter(b => b.concept_accession === x.accession),
           citation_overlaps: generation.findings.filter(f => f.kind === 'citation_overlap_member_counterexample' && f.concept_accession === x.accession) })) })),
