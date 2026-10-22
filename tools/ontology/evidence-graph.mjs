@@ -4,6 +4,7 @@
 // endpoint is not in the supplied generations is listed as broken instead of drawn. Every node and edge is a
 // generated proposal; validation (source quote located at a pin), review (no decision record exists) and the kind of
 // evidence (what the source says or declares) are three separate facts.
+import { conceptEvidenceGate, projectedOccurrence } from './evidence-standing.mjs';
 import { fail } from './schemas.mjs';
 
 export const GRAPH_SCHEMA = 'estate-map/ontology-evidence-graph/v1';
@@ -47,7 +48,7 @@ const validationOf = occ => ({ source_quote_located: Boolean(occ?.quote && occ?.
 const REVIEW = Object.freeze({ state: 'not_reviewed', decision_id: null, recording_enabled: false });
 
 function subjectDisplay(referent, occ) {
-  const observed = occ?.standing === 'source_observed';
+  const observed = occ?.standing === 'source_observed' && occ?.span_class !== 'comment';
   const group = observed ? 'observed' : 'statement';
   const code = ['code_construct', 'configuration_entry', 'build_step'].includes(referent.kind);
   let label;
@@ -70,39 +71,51 @@ export function evidenceGraph({ generations, alignment = null }) {
 
   for (const g of generations) {
     const standingOf = new Map(g.concept_standing.map(s => [s.accession, s.standing]));
+    const assertionsByConcept = Map.groupBy(g.assertions ?? [], a => a.concept_accession);
     const artifactById = new Map(g.source_artifacts.map(a => [a.artifact_id, a]));
+    const artifactKindOf = id => artifactById.get(id)?.kind ?? null;
+    const projectOcc = occ => projectedOccurrence(occ, artifactKindOf(occ?.artifact_id));
+    const classOf = occ => {
+      const kind = occ?.standing;
+      if (kind === 'comment_claim' || kind === 'documentary_claim' || kind === 'third_party_reference') return 'claim';
+      if (kind === 'source_observed') return 'observed code';
+      return null;
+    };
     for (const c of g.collections) {
       collections.push({ collection_id: c.collection_id, generation_id: g.generation_id, mode: c.mode });
       for (const k of c.concepts) {
         const standing = standingOf.get(k.accession);
         const support = c.evidence.filter(e => e.concept_accession === k.accession && e.role === 'support');
+        const gate = conceptEvidenceGate({ standing, evidence: support, assertions: assertionsByConcept.get(k.accession) ?? [], storedStatus: k.status, artifactKindOf });
         const stale = g.findings.filter(f => f.kind === 'stale_evidence' && f.concept_accession === k.accession && f.role === 'support').length;
         const id = conceptKey(g.generation_id, k.accession);
         nodes.set(id, { id, type: 'concept', label: k.label, category: k.semantic_category, definition: k.definition, inclusion: k.inclusion, exclusion: k.exclusion,
           collection_id: c.collection_id, generation_id: g.generation_id, accession: k.accession, version_id: k.version_id, origin: k.origin,
-          standing: standing?.summary ?? 'no_located_evidence', side: standing?.summary === 'source_observed' ? 'observed' : 'statement',
+          standing: standing?.summary ?? 'no_located_evidence', side: gate.evidence_class === 'observed code' ? 'observed' : 'statement',
+          status: gate.status, evidence_class: gate.evidence_class,
           currentness: { located: support.length, stale, state: support.length ? (stale ? 'partly_stale' : 'supported') : (stale ? 'support_stale' : 'no_support') },
-          support: support.slice(0, 3).map(e => ({ ...quoteOf(e), validation: validationOf(e) })), review: REVIEW, proposal: true });
+          support: support.slice(0, 3).map(e => { const projected = projectOcc(e); return { ...quoteOf(projected), validation: validationOf(projected) }; }), review: REVIEW, proposal: gate.status !== 'held' });
         conceptNode.set(`${c.collection_id}|${k.accession}`, id);
       }
     }
     const conceptByAccession = new Map(g.collections.flatMap(c => c.concepts.map(k => [k.accession, conceptKey(g.generation_id, k.accession)])));
     for (const r of g.referents) {
-      const occ = r.occurrence, display = subjectDisplay(r, occ);
+      const occ = projectOcc(r.occurrence), display = subjectDisplay(r, occ);
       const id = subjectKey(r.collection_id, r.referent_id);
       const artifact = artifactById.get(occ.artifact_id);
       nodes.set(id, { id, type: 'subject', label: r.name, kind: r.kind, display_kind: display.label, group: display.group, basis: r.basis, collection_id: r.collection_id,
         generation_id: g.generation_id, referent_id: r.referent_id, denotes: r.denotes, held_out: Boolean(r.held_out), coverage: r.coverage, instance_status: r.instance_status ?? null,
-        source: { ...quoteOf(occ), artifact_kind: artifact?.kind ?? null, validation: validationOf(occ) }, evidence_kind: evidenceKindOf(occ),
+        source: { ...quoteOf(occ), artifact_kind: artifact?.kind ?? null, validation: validationOf(occ) }, evidence_kind: evidenceKindOf(occ), evidence_class: classOf(occ),
         graph_node_ids: artifact?.graph_node_ids ?? [], review: REVIEW, proposal: true });
     }
     for (const a of g.assertions) {
       const from = subjectKey(g.referents.find(r => r.referent_id === a.referent_id)?.collection_id ?? '', a.referent_id), to = conceptByAccession.get(a.concept_accession);
       if (!nodes.has(from) || !to) { broken.push({ id: a.assertion_id, kind: 'assertion', reason: !to ? 'concept_not_in_generation' : 'subject_not_in_generation' }); continue; }
+      const occ = projectOcc(a.occurrence);
       const id = `edge:assertion:${a.assertion_id}`;
       edges.set(id, { id, type: 'assertion', from, to, predicate: a.predicate, label: a.polarity === 'deny' ? `not ${a.predicate.replaceAll('_', ' ')}` : a.predicate.replaceAll('_', ' '),
-        polarity: a.polarity, membership: a.membership, constitutive: a.constitutive, meaning: RELATION_MEANING[a.predicate] ?? null, source: { ...quoteOf(a.occurrence) },
-        validation: validationOf(a.occurrence), evidence_kind: evidenceKindOf(a.occurrence), runtime_verified: false, review: REVIEW, proposal: true, dashed: false });
+        polarity: a.polarity, membership: a.membership, constitutive: a.constitutive, meaning: RELATION_MEANING[a.predicate] ?? null, source: { ...quoteOf(occ) },
+        validation: validationOf(occ), evidence_kind: evidenceKindOf(occ), runtime_verified: false, review: REVIEW, proposal: true, dashed: false });
     }
   }
 

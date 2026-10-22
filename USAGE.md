@@ -459,8 +459,10 @@ and explicit reclassification.
 `ascrybe ontology discover --corpus <private-corpus.json> --repositories <private-repos.json> --output-dir <private-dir>`
 asks the selected LLM to propose a vocabulary **from the source itself**: schemes, and concepts with
 a definition, inclusion and exclusion, aliases, relations, gaps and unresolved questions. No concept
-or category names are supplied. Everything is `proposed`; nothing is accepted, and no graph,
-generation or head changes.
+or category names are supplied. A concept with no located evidence is `held`, not `proposed`.
+Comment-only or document-only evidence is a claim, not observed code. That standing is derived
+when a generation is read, so an older generation stays readable and is not rewritten. Everything
+else is `proposed`; nothing is accepted, and no graph, generation or head changes.
 
 Each concept has a **semantic category** that fixes how a subject can be an instance of it:
 `responsibility` (code or configuration `implements` it), `type` (`is_a`), `strategy` (a concrete

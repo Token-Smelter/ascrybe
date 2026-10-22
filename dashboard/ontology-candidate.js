@@ -33,7 +33,8 @@ function sourceLine(o) {
   return h('div', { class: 'source' },
     h('button', { type: 'button', class: 'linkish', onclick: () => go('artifact', o.artifact_id) }, o.artifact_id),
     h('span', {}, `${o.repository}:${o.path}:${lines(o)}`), h('span', {}, `@${String(o.commit_sha).slice(0, 8)}`),
-    stamp(o.standing), o.span_class && o.span_class !== 'code' ? h('span', { class: 'stamp stamp--muted', title: 'The passage is comment text: observed at the pin, but what it says is a claim, not behaviour' }, `${o.span_class} text`) : null);
+    stamp(o.standing), o.evidence_class ? h('span', { class: 'stamp stamp--muted' }, o.evidence_class) : null,
+    o.span_class && o.span_class !== 'code' ? h('span', { class: 'stamp stamp--muted', title: 'The passage is comment text: observed at the pin, but what it says is a claim, not behaviour' }, `${o.span_class} text`) : null);
 }
 
 // A quote usually starts mid-line; drop the indentation its continuation lines share.
@@ -98,7 +99,8 @@ function renderConcept(accession) {
   return h('article', { class: 'reveal' },
     h('div', { class: 'card' },
       h('div', { class: 'source' }, h('span', {}, c.accession), h('span', { class: 'stamp stamp--muted' }, c.semantic_category),
-        stamp(c.standing.summary), h('span', { class: 'stamp stamp--muted' }, words(c.origin)), h('span', {}, `version ${short(c.version_id)}`)),
+        stamp(c.standing.summary), c.status === 'held' ? stamp('held') : null, c.evidence_class ? h('span', { class: 'stamp stamp--muted' }, c.evidence_class) : null,
+        h('span', { class: 'stamp stamp--muted' }, words(c.origin)), h('span', {}, `version ${short(c.version_id)}`)),
       h('h2', {}, c.label),
       h('p', { class: 'definition' }, c.definition),
       h('div', { class: 'bounds' },
@@ -424,7 +426,8 @@ function railVocabulary() {
         onclick: () => go('concept', x.accession) },
         h('span', { class: 'rail-item__label' }, x.label),
         h('span', { class: 'rail-item__count', title: 'instances' }, x.assertions.filter(a => a.membership).length),
-        h('span', { class: 'rail-item__meta' }, x.semantic_category, stamp(x.standing.summary), words(x.origin),
+        h('span', { class: 'rail-item__meta' }, x.semantic_category, stamp(x.standing.summary), x.status === 'held' ? stamp('held') : null,
+          x.evidence_class ? h('span', { class: 'stamp stamp--muted' }, x.evidence_class) : null, words(x.origin),
           x.pending_changes.length ? h('span', { class: 'stamp stamp--muted' }, 'change pending') : null,
           x.blockers.length ? stamp('blocks_acceptance') : null)))])));
 }

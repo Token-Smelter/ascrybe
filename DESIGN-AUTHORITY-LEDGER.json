@@ -22,9 +22,9 @@
     },
     {
       "document_id": "USAGE.md",
-      "bytes": 39148,
-      "sha256": "3159074165fc0a062a3e60af82103bdf4cb0b2c6fbce7db17d3c5845ba6fd0ec",
-      "produced_at_commit_sha": "fa57d0ce7ba003eaf1181bca8187f414d5130264"
+      "bytes": 39397,
+      "sha256": "d7cd39e06c4b83bcb1faae6783dfabe576038bfa39f50d8f9b290e2d631bafb4",
+      "produced_at_commit_sha": "6caa1dcda9cc3fdbb90a522985f70a876f3ba41d"
     },
     {
       "document_id": "docs/architecture.md",
