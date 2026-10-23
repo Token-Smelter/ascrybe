@@ -75,6 +75,8 @@ const COMMANDS = {
   skill: { script: 'scripts/build-skill-bundle.mjs', verbs: ['bundle', 'install', 'verify'],
     describe: 'build, install, or check the read-only skill' },
   eval: { script: 'tools/eval/cli.mjs', describe: 'run an evaluation' },
+  usage: { script: 'tools/model-usage.mjs', config: true,
+    describe: 'report per-tier calls and known cost from per-call records; targets alarm only' },
   ontology: { script: 'tools/ontology/cli.mjs', config: true,
     verbs: ['build', 'stage', 'promote', 'query', 'classify', 'analyze-gap', 'discover', 'resolve-unknown', 'align', 'inventory', 'estate', 'diagnose', 'reconcile', 'predicates', 'coverage', 'loop', 'view'],
     describe: 'the additive interpretation sidecar -- build, stage, query, or propose source-grounded classifications and vocabularies' },

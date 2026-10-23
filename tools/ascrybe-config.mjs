@@ -5,6 +5,9 @@ import { sha256, stableStringify } from './lib.mjs';
 import { validateEntityAnalysisConfig } from './entity-analysis-config.mjs';
 
 export const ASCRYBE_RUNTIME_CONFIG_SCHEMA = 'estate-map/runtime-config/v1';
+// Closed report vocabulary. Dispatch does not read these names: a tier is a role alias, and a
+// target is an alarm on a later usage report, not a cap and not a route.
+export const MODEL_TIER_NAMES = Object.freeze(['small', 'medium', 'large']);
 const canonical = value => stableStringify(value).trim();
 const clean = value => String(value ?? '').trim();
 
@@ -68,8 +71,80 @@ function modelConfig(role, input) {
   return Object.freeze(output);
 }
 
+function closedTierRecord(record, label) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    fail('RUNTIME_CONFIG_INVALID', `${label} must be an object`);
+  }
+  const unknown = Object.keys(record).filter(key => !MODEL_TIER_NAMES.includes(key));
+  if (unknown.length) {
+    fail('RUNTIME_CONFIG_UNKNOWN_FIELD', `${label} contains unknown fields: ${unknown.join(', ')}`, { unknown });
+  }
+}
+
+// Per-call records carry model, not the role that issued the call. Two tiers on one exact model
+// name are ambiguous even when their thinking levels differ, and that split stays unsupported
+// until the record itself names the role.
+function validateModelTiers(input, models) {
+  closedTierRecord(input, 'model_tiers');
+  const tiers = {};
+  for (const tier of MODEL_TIER_NAMES) {
+    if (!Object.hasOwn(input, tier)) continue;
+    const role = input[tier];
+    if (typeof role !== 'string' || !Object.hasOwn(models, role)) {
+      fail('RUNTIME_CONFIG_MODEL_TIER_ROLE_INVALID', `model_tiers.${tier} must name a configured models role`, { tier, role });
+    }
+    tiers[tier] = role;
+  }
+  const byModel = new Map();
+  for (const tier of MODEL_TIER_NAMES) {
+    if (!Object.hasOwn(tiers, tier)) continue;
+    const model = models[tiers[tier]].name;
+    const group = byModel.get(model) ?? [];
+    group.push(tier);
+    byModel.set(model, group);
+  }
+  for (const [model, group] of byModel) {
+    if (group.length < 2) continue;
+    const thinking = Object.fromEntries(group.map(tier => [tier, models[tiers[tier]].thinking]));
+    fail('RUNTIME_CONFIG_MODEL_TIER_AMBIGUOUS',
+      `model_tiers ${group.join(' and ')} resolve to the same model ${model}; per-call records carry model but not role, so the same model at different thinking levels cannot be split across tiers`,
+      { tiers: group.slice(), model, thinking });
+  }
+  return Object.freeze(tiers);
+}
+
+function finiteUnitShare(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function validateTierTargets(input, declared) {
+  closedTierRecord(input, 'tier_targets');
+  const targets = {};
+  let sum = 0;
+  for (const tier of MODEL_TIER_NAMES) {
+    if (!Object.hasOwn(input, tier)) continue;
+    if (!Object.hasOwn(declared, tier)) {
+      fail('RUNTIME_CONFIG_TIER_TARGET_UNDECLARED', `tier_targets.${tier} names a tier model_tiers does not declare`, { tier });
+    }
+    const value = input[tier];
+    if (!finiteUnitShare(value)) {
+      fail('RUNTIME_CONFIG_TIER_TARGET_INVALID', `tier_targets.${tier} must be a finite number in [0, 1]`, { tier, value });
+    }
+    const normalized = Object.is(value, -0) ? 0 : value;
+    targets[tier] = normalized;
+    sum += normalized;
+  }
+  // At most two additions of unit-interval values can round a true total of 1 one ulp
+  // above 1, as 0.33 + 0.56 + 0.11 does. A reporting-precision round would also hide a
+  // real excess such as 0.5 + 0.5000001.
+  if (sum > 1 + Number.EPSILON) {
+    fail('RUNTIME_CONFIG_TIER_TARGET_SUM', `tier_targets sum to ${sum}, which exceeds 1`, { sum, targets });
+  }
+  return Object.freeze(targets);
+}
+
 export function validateEstateMapRuntimeConfig(input) {
-  closed(input, ['schema', 'models', 'neo4j', 'projection', 'dashboard', 'source_repositories', 'catalog_globs', 'ontology_classification', 'entity_analysis'], 'runtime config');
+  closed(input, ['schema', 'models', 'neo4j', 'projection', 'dashboard', 'source_repositories', 'catalog_globs', 'ontology_classification', 'entity_analysis', 'model_tiers', 'tier_targets'], 'runtime config');
   if (input.schema !== ASCRYBE_RUNTIME_CONFIG_SCHEMA) {
     fail('RUNTIME_CONFIG_SCHEMA_UNSUPPORTED', `expected ${ASCRYBE_RUNTIME_CONFIG_SCHEMA}`);
   }
@@ -82,6 +157,8 @@ export function validateEstateMapRuntimeConfig(input) {
     fail('RUNTIME_CONFIG_MODEL_ROLE_INVALID', 'model role names must be lowercase identifiers');
   }
   const models = Object.freeze(Object.fromEntries(roles.map(role => [role, modelConfig(role, input.models[role])])));
+  const modelTiers = input.model_tiers === undefined ? undefined : validateModelTiers(input.model_tiers, models);
+  const tierTargets = input.tier_targets === undefined ? undefined : validateTierTargets(input.tier_targets, modelTiers ?? {});
 
   closed(input.neo4j, ['uri_env', 'username_env', 'password_env'], 'neo4j');
   const neo4j = Object.freeze(Object.fromEntries(['uri_env', 'username_env', 'password_env'].map(field => {
@@ -139,7 +216,10 @@ export function validateEstateMapRuntimeConfig(input) {
       credential_env: clean(systemOneInput.credential_env) }),
   });
 
-  return Object.freeze({ schema: ASCRYBE_RUNTIME_CONFIG_SCHEMA, models, neo4j, projection, dashboard,
+  return Object.freeze({ schema: ASCRYBE_RUNTIME_CONFIG_SCHEMA, models,
+    ...(modelTiers === undefined ? {} : { model_tiers: modelTiers }),
+    ...(tierTargets === undefined ? {} : { tier_targets: tierTargets }),
+    neo4j, projection, dashboard,
     catalog_globs: catalogGlobs,
     ...(input.entity_analysis === undefined ? {} : { entity_analysis: validateEntityAnalysisConfig(input.entity_analysis) }),
     ...(input.ontology_classification === undefined ? {} : { ontology_classification: ontologyClassification }),

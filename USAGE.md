@@ -583,6 +583,56 @@ or deployment was extracted. Only `association: "exact_component"` is a native c
 matched graph. “Graph observed” reports projected code data, not a deployment or behavior proof.
 The operator can press **Check graph** when a matching private artifact arrives.
 
+## Model tiers
+
+Optional. A config with no `model_tiers` validates as before. These fields do not choose a model,
+cap a run, or refuse a call. Dispatch does not read them.
+
+`model_tiers` maps any subset of `small`, `medium`, and `large` to a role already declared in
+`models`. A tier names a role, not a model string. Omit a tier to leave it undeclared. Unknown
+tier names and any other field are refused (`RUNTIME_CONFIG_UNKNOWN_FIELD`). A value that is not
+a configured role is refused (`RUNTIME_CONFIG_MODEL_TIER_ROLE_INVALID`).
+
+Two declared tiers that resolve to the same exact model name are refused
+(`RUNTIME_CONFIG_MODEL_TIER_AMBIGUOUS`). The error names the tiers and the model. Per-call
+records carry `model` and not the role that issued the call, so the same model at two thinking
+levels cannot be split across tiers. That split is unsupported until records carry role.
+
+`tier_targets` is optional. Each value is a finite number in `[0, 1]`, the values sum to at most
+1, and each key must be a tier `model_tiers` declares. The sum is compared as accumulated, not
+rounded to a reporting precision first, so `0.5` + `0.5000001` is over 1 and refused. Addition of
+a true total of 1 can land one ulp above 1; that step is still accepted. A target is a report alarm
+only.
+
+```bash
+ascrybe usage --calls <per-call.json>
+```
+
+The command reads the same runtime config as other config verbs (`--runtime-config`, else
+`$ASCRYBE_CONFIG`, else `./ascrybe.config.json`). `--calls` is a JSON array of per-call records,
+or a model-stats object with `per_call`. It writes a JSON report and does not call a model.
+
+Each declared tier, plus `untiered`, reports calls, call share, known cost (`cost`), cost share,
+and `cost_status`. A call whose model matches no declared tier is `untiered`. It is counted,
+never dropped. `call_share` and `cost_share` are `null` when their denominator is zero: an empty
+run is not reported as 0% or 100%, and a zero known-cost total is not a fabricated complete share.
+
+Known cost sums only calls the existing billing rules price. Unpriced statuses
+(`accepted_usage_unknown`, `acceptance_unknown`, `usage_reported_cost_unknown`) do not contribute
+their placeholder cost, including a non-zero placeholder. A call whose own `cost_status` is
+`lower_bound` keeps that status, and its stated cost stays a floor rather than becoming complete
+spend. A tier whose own calls are all priced keeps `cost_status: complete` for that tier's known
+cost. If any call is unpriced or `lower_bound`, every tier's cost share and the overall shares
+are still `partial` (`shares_status`, `cost_share_status`, `spend_account: partial_known_cost`),
+because the share denominator is incomplete. A partial share is not complete actual spend.
+`totals.known_cost` is that known floor; `totals.cost_status` stays `lower_bound`. A stats
+envelope that says `lower_bound` or names more unpriced attempts than `per_call` contains is
+preserved the same way, and the gap is `totals.unassigned_unpriced_attempts` — it is not invented
+as a call and not assigned to a tier. An over-target alarm may still fire from the known-cost
+share. The flag is `over_target: { fired, partial, known_cost_share, target }` and carries
+`partial: true` when the share is partial. No target means `over_target` is null — the report
+does not invent an alarm.
+
 ## Where things live
 
 | | |

@@ -1,0 +1,37 @@
+[
+  {
+    "tag": "small-a",
+    "model": "example-provider/ledger-reader",
+    "billing_status": "reported",
+    "cost": 0.25,
+    "cost_reported": true
+  },
+  {
+    "tag": "small-b",
+    "model": "example-provider/ledger-reader",
+    "billing_status": "reported",
+    "cost": 0.25,
+    "cost_reported": true
+  },
+  {
+    "tag": "medium-priced",
+    "model": "example-provider/graph-reader",
+    "billing_status": "reported",
+    "cost": 0.5,
+    "cost_reported": true
+  },
+  {
+    "tag": "medium-unpriced",
+    "model": "example-provider/graph-reader",
+    "billing_status": "accepted_usage_unknown",
+    "cost": 99,
+    "cost_reported": false
+  },
+  {
+    "tag": "untiered",
+    "model": "example-provider/other",
+    "billing_status": "reported",
+    "cost": 1,
+    "cost_reported": true
+  }
+]
