@@ -115,6 +115,25 @@ test('tier targets must be finite unit shares of declared tiers and sum to at mo
   const full = structuredClone(base);
   full.tier_targets = { small: 1 };
   assert.equal(validateEstateMapRuntimeConfig(full).tier_targets.small, 1);
+  const halves = structuredClone(base);
+  halves.tier_targets = { small: 0.5, medium: 0.5 };
+  assert.deepEqual(validateEstateMapRuntimeConfig(halves).tier_targets, { small: 0.5, medium: 0.5 });
+  // 0.33 + 0.56 + 0.11 is a true decimal total of 1 that addition lands one ulp above 1.
+  const unitNoise = structuredClone(base);
+  unitNoise.model_tiers = { ...unitNoise.model_tiers, large: 'evaluation_arm' };
+  unitNoise.tier_targets = { small: 0.33, medium: 0.56, large: 0.11 };
+  assert.deepEqual(validateEstateMapRuntimeConfig(unitNoise).tier_targets,
+    { small: 0.33, medium: 0.56, large: 0.11 });
+  const boundary = JSON.parse(readFileSync(configFixture, 'utf8'));
+  boundary.tier_targets = { small: 0.5, medium: 0.5000001 };
+  assert.throws(() => validateEstateMapRuntimeConfig(boundary), error => {
+    assert.equal(error.code, 'RUNTIME_CONFIG_TIER_TARGET_SUM');
+    assert.ok(error.detail.sum > 1);
+    assert.equal(error.detail.targets.small, 0.5);
+    assert.equal(error.detail.targets.medium, 0.5000001);
+    assert.notEqual(Number(error.detail.sum.toFixed(6)), error.detail.sum);
+    return true;
+  });
 });
 
 test('two tiers on the same exact model are refused by name, including different thinking levels', () => {

@@ -134,9 +134,11 @@ function validateTierTargets(input, declared) {
     targets[tier] = normalized;
     sum += normalized;
   }
-  const rounded = Number(sum.toFixed(6));
-  if (rounded > 1) {
-    fail('RUNTIME_CONFIG_TIER_TARGET_SUM', `tier_targets sum to ${rounded}, which exceeds 1`, { sum: rounded, targets });
+  // At most two additions of unit-interval values can round a true total of 1 one ulp
+  // above 1, as 0.33 + 0.56 + 0.11 does. A reporting-precision round would also hide a
+  // real excess such as 0.5 + 0.5000001.
+  if (sum > 1 + Number.EPSILON) {
+    fail('RUNTIME_CONFIG_TIER_TARGET_SUM', `tier_targets sum to ${sum}, which exceeds 1`, { sum, targets });
   }
   return Object.freeze(targets);
 }

@@ -599,7 +599,10 @@ records carry `model` and not the role that issued the call, so the same model a
 levels cannot be split across tiers. That split is unsupported until records carry role.
 
 `tier_targets` is optional. Each value is a finite number in `[0, 1]`, the values sum to at most
-1, and each key must be a tier `model_tiers` declares. A target is a report alarm only.
+1, and each key must be a tier `model_tiers` declares. The sum is compared as accumulated, not
+rounded to a reporting precision first, so `0.5` + `0.5000001` is over 1 and refused. Addition of
+a true total of 1 can land one ulp above 1; that step is still accepted. A target is a report alarm
+only.
 
 ```bash
 ascrybe usage --calls <per-call.json>
