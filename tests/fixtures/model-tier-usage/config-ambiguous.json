@@ -1,0 +1,46 @@
+{
+  "schema": "estate-map/runtime-config/v1",
+  "models": {
+    "documentary_claims": {
+      "runner": "pi",
+      "name": "example-provider/ledger-reader",
+      "thinking": "off",
+      "concurrency": 2,
+      "window_bytes": 4000,
+      "timeout_ms": 600000,
+      "max_event_bytes": 536870912,
+      "max_answer_bytes": 4194304
+    },
+    "code_claims": {
+      "runner": "pi",
+      "name": "example-provider/graph-reader",
+      "thinking": "low",
+      "concurrency": 2,
+      "window_bytes": 4000,
+      "timeout_ms": 600000,
+      "max_event_bytes": 536870912,
+      "max_answer_bytes": 4194304
+    },
+    "evaluation_judge": {
+      "runner": "pi",
+      "name": "example-provider/ledger-reader",
+      "thinking": "high",
+      "concurrency": 1,
+      "window_bytes": 4000,
+      "timeout_ms": 600000,
+      "max_event_bytes": 536870912,
+      "max_answer_bytes": 4194304
+    }
+  },
+  "model_tiers": {
+    "small": "documentary_claims",
+    "large": "evaluation_judge"
+  },
+  "neo4j": {
+    "uri_env": "ASCRYBE_NEO4J_URI",
+    "username_env": "ASCRYBE_NEO4J_USERNAME",
+    "password_env": "ASCRYBE_NEO4J_PASSWORD"
+  },
+  "projection": { "batch_size": 500, "default_view": "selected" },
+  "dashboard": { "host": "127.0.0.1", "port": 8790, "neighbor_limit": 120, "overview_limit": 100 }
+}

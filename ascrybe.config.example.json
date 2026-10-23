@@ -3,7 +3,7 @@
   "models": {
     "documentary_claims": {
       "runner": "pi",
-      "name": "<provider/model>",
+      "name": "<example-provider/ledger-reader>",
       "thinking": "off",
       "concurrency": 5,
       "window_bytes": 4000,
@@ -13,7 +13,7 @@
     },
     "code_claims": {
       "runner": "pi",
-      "name": "<provider/model>",
+      "name": "<example-provider/graph-reader>",
       "thinking": "off",
       "concurrency": 5,
       "window_bytes": 4000,
@@ -23,7 +23,7 @@
     },
     "evaluation_arm": {
       "runner": "pi",
-      "name": "<provider/model>",
+      "name": "<example-provider/review-arm>",
       "thinking": "high",
       "concurrency": 2,
       "window_bytes": 4000,
@@ -33,7 +33,7 @@
     },
     "evaluation_judge": {
       "runner": "pi",
-      "name": "<provider/model>",
+      "name": "<example-provider/review-judge>",
       "thinking": "high",
       "concurrency": 2,
       "window_bytes": 4000,
@@ -41,6 +41,16 @@
       "max_event_bytes": 536870912,
       "max_answer_bytes": 4194304
     }
+  },
+  "model_tiers": {
+    "small": "documentary_claims",
+    "medium": "code_claims",
+    "large": "evaluation_judge"
+  },
+  "tier_targets": {
+    "small": 0.5,
+    "medium": 0.3,
+    "large": 0.15
   },
   "neo4j": {
     "uri_env": "ASCRYBE_NEO4J_URI",
