@@ -401,3 +401,28 @@ test('the usage CLI reports the committed fixture and refuses an ambiguous confi
   assert.equal(printed.totals.known_cost, report.totals.known_cost);
   assert.equal(printed.untiered.calls, 1);
 });
+
+const twoTiers = () => validateEstateMapRuntimeConfig({
+  ...fixture(),
+  model_tiers: { small: 'documentary_claims', medium: 'code_claims' },
+  tier_targets: { small: 0.5, medium: 0.5 },
+});
+
+test('a share just above its target fires the alarm even when the displayed share rounds to the target', () => {
+  const report = reportModelTierUsage([priced('example-provider/ledger-reader', 1.000001), priced('example-provider/other', 1)], twoTiers());
+  assert.deepEqual([report.tiers.small.cost_share, report.tiers.small.over_target.fired], [0.5, true]);
+});
+
+test('tiny known costs are summed and shared before display rounding', () => {
+  const report = reportModelTierUsage([priced('example-provider/ledger-reader', 0.0000004), priced('example-provider/graph-reader', 0.0000004)], twoTiers());
+  assert.deepEqual([report.totals.known_cost, report.tiers.small.cost_share, report.tiers.medium.cost_share,
+    report.tiers.small.over_target.fired, report.tiers.medium.over_target.fired], [0.000001, 0.5, 0.5, false, false]);
+});
+
+test('a not-accepted call is a known zero charge, not a lower bound', () => {
+  const report = reportModelTierUsage([
+    { tag: 'n', model: 'example-provider/ledger-reader', accepted: false, billing_status: 'not_accepted', cost: 0, cost_reported: false },
+    priced('example-provider/graph-reader', 0.5),
+  ], twoTiers());
+  assert.deepEqual([report.partial, report.tiers.small.cost_status, report.tiers.small.cost, report.totals.cost_status], [false, 'complete', 0, 'complete']);
+});

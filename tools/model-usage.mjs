@@ -77,6 +77,7 @@ function usageFail(code, message, detail) {
 }
 
 const money = value => Number(Number(value).toFixed(6));
+const rawRatio = (part, whole) => whole > 0 ? part / whole : null;
 const ratio = (part, whole) => whole > 0 ? Number((part / whole).toFixed(6)) : null;
 
 function callRecord(entry) {
@@ -202,17 +203,18 @@ function tierBindings(config) {
   return bindings;
 }
 
-function overTarget(target, knownShare, partial) {
+// The alarm compares the unrounded share: a share just above its target can display as the target.
+function overTarget(target, knownShare, rawShare, partial) {
   if (target == null) return null;
   return Object.freeze({
-    fired: knownShare != null && knownShare > target,
+    fired: rawShare != null && rawShare > target,
     partial,
     known_cost_share: knownShare,
     target,
   });
 }
 
-function usageRow({ role, model, summary, callShare, costShare, shareStatus, target, partial }) {
+function usageRow({ role, model, summary, callShare, costShare, rawCostShare, shareStatus, target, partial }) {
   return Object.freeze({
     role,
     model,
@@ -227,7 +229,7 @@ function usageRow({ role, model, summary, callShare, costShare, shareStatus, tar
     unpriced_calls: summary.unpriced,
     lower_bound_calls: summary.lower,
     target,
-    over_target: overTarget(target, costShare, partial),
+    over_target: overTarget(target, costShare, rawCostShare, partial),
   });
 }
 
@@ -260,6 +262,7 @@ export function reportModelTierUsage(input, configInput) {
       summary,
       callShare: ratio(summary.calls, totalCalls),
       costShare: ratio(summary.known, totalKnown),
+      rawCostShare: rawRatio(summary.known, totalKnown),
       shareStatus,
       target: binding.target,
       partial: sharesPartial,
